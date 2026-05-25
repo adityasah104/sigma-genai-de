@@ -1,4 +1,4 @@
-"""Verify Cortex access works. Run: python verify_cortex.py"""
+"""Verify Cortex access works. Run: python3 verify_cortex.py"""
 import os
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend

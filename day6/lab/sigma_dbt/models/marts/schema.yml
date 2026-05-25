@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: mart_merchant_performance
+    description: "Mart containing aggregated transaction data with merchant and customer details."
+    columns:
+      - name: merchant_id
+        tests:
+          - not_null
+      - name: merchant_name
+      - name: total_transactions
+      - name: completed_transactions
+      - name: failed_count
+      - name: total_revenue
+      - name: avg_transaction_value
+      - name: unique_customers
+      - name: failure_rate_pct
+        tests:
+          - is_between:
+              min_value: 0
+              max_value: 100

@@ -25,7 +25,7 @@ WHERE THIS FITS IN THE PLATFORM:
 ═══════════════════════════════════════════════════════════════
 
 HOW TO RUN:
-  python 2_nl2sql_pipeline.py
+  python3 2_nl2sql_pipeline.py
 """
 
 import boto3
@@ -39,7 +39,8 @@ from sample_data import SCHEMA_RICH, NL2SQL_QUESTIONS, SNOWFLAKE_CONFIG_TEMPLATE
 
 # ── CONFIGURATION ──────────────────────────────────────────
 bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-MODEL_ID = 'amazon.nova-pro-v1:0'  # Pro for better SQL reasoning
+# MODEL_ID = 'amazon.nova-pro-v1:0'  # Pro for better SQL reasoning
+MODEL_ID = 'amazon.nova-lite-v1:0'
 
 # Schema context with business rules and few-shot examples
 SCHEMA_CONTEXT = SCHEMA_RICH

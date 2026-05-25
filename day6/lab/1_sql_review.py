@@ -24,7 +24,7 @@ IMPORTANT: SPEND 5 MINS TO REVIEW THE CODE. YOU HAVE A QUIZ ON THIS LATER.
 ═══════════════════════════════════════════════════════════════
 
 HOW TO RUN:
-  python 1_sql_review.py
+  python3 1_sql_review.py
 """
 
 import boto3

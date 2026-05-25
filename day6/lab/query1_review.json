@@ -1,0 +1,35 @@
+{
+  "file": "queries/query1.sql",
+  "reviewed_at": "2026-05-25T15:56:39.905415",
+  "issues_found": 3,
+  "review": {
+    "issues": [
+      {
+        "severity": "Critical",
+        "category": "Correctness",
+        "title": "Incorrect revenue calculation",
+        "line": "SUM(t.AMOUNT) AS TOTAL_REVENUE",
+        "problem": "Revenue should only include transactions with status 'COMPLETED', but the query includes all transactions where status is not 'FAILED'.",
+        "fix": "SUM(CASE WHEN t.STATUS = 'COMPLETED' THEN t.AMOUNT ELSE 0 END) AS TOTAL_REVENUE"
+      },
+      {
+        "severity": "Medium",
+        "category": "Correctness",
+        "title": "Missing filter for 'COMPLETED' status",
+        "line": "WHERE t.STATUS!= 'FAILED'",
+        "problem": "The query should filter transactions where status is 'COMPLETED' to correctly calculate revenue.",
+        "fix": "WHERE t.STATUS = 'COMPLETED'"
+      },
+      {
+        "severity": "Low",
+        "category": "Readability",
+        "title": "Inconsistent naming convention",
+        "line": "FACT_TRANSACTIONS, DIM_MERCHANT, MERCHANT_NAME, AMOUNT, TOTAL_REVENUE, TOTAL_TXNS",
+        "problem": "The query uses inconsistent naming conventions (e.g., FACT_TRANSACTIONS vs. m.MERCHANT_NAME). It should be consistent, either all uppercase or all lowercase.",
+        "fix": "SELECT m.merchant_name, SUM(t.amount) AS total_revenue, COUNT(*) AS total_txns FROM fact_transactions t JOIN dim_merchant m ON t.merchant_id = m.merchant_id WHERE t.status = 'COMPLETED' GROUP BY m.merchant_name;"
+      }
+    ],
+    "corrected_sql": "SELECT m.merchant_name, SUM(CASE WHEN t.status = 'COMPLETED' THEN t.amount ELSE 0 END) AS total_revenue, COUNT(*) AS total_txns FROM fact_transactions t JOIN dim_merchant m ON t.merchant_id = m.merchant_id WHERE t.status = 'COMPLETED' GROUP BY m.merchant_name;",
+    "summary": "The query had critical correctness issues with revenue calculation and missing filter for 'COMPLETED' status. It also had a readability issue with inconsistent naming conventions."
+  }
+}

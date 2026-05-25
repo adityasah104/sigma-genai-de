@@ -1,0 +1,35 @@
+{
+  "file": "queries/query2.sql",
+  "reviewed_at": "2026-05-25T15:56:45.701821",
+  "issues_found": 3,
+  "review": {
+    "issues": [
+      {
+        "severity": "Critical",
+        "category": "Correctness",
+        "title": "Incorrect failure rate calculation",
+        "line": "line 8",
+        "problem": "The failure rate calculation is incorrect because it uses the total count of transactions instead of only completed transactions.",
+        "fix": "SUM(CASE WHEN STATUS = 'COMPLETED' THEN 1 ELSE 0 END)"
+      },
+      {
+        "severity": "Medium",
+        "category": "Readability",
+        "title": "Lack of comments",
+        "line": "entire query",
+        "problem": "The query lacks comments explaining the logic, making it harder to understand.",
+        "fix": "-- Add comments explaining the logic of each part of the query"
+      },
+      {
+        "severity": "Low",
+        "category": "Readability",
+        "title": "Column aliases should be more descriptive",
+        "line": "line 3",
+        "problem": "The column aliases could be more descriptive for better readability.",
+        "fix": "COUNT(*) AS TOTAL_TRANSACTIONS, SUM(CASE WHEN STATUS = 'FAILED' THEN 1 ELSE 0 END) AS FAILED_TRANSACTIONS"
+      }
+    ],
+    "corrected_sql": "-- Payment method performance (corrected)\n\nSELECT \n    PAYMENT_METHOD,\n    COUNT(*) AS TOTAL_TRANSACTIONS,\n    SUM(CASE WHEN STATUS = 'FAILED' THEN 1 ELSE 0 END) AS FAILED_TRANSACTIONS,\n    (SUM(CASE WHEN STATUS = 'FAILED' THEN 1 ELSE 0 END) * 100 / COUNT(*)) AS FAILURE_RATE\nFROM FACT_TRANSACTIONS\nGROUP BY PAYMENT_METHOD\nHAVING COUNT(*) > 0;",
+    "summary": "The query had a critical correctness issue with the failure rate calculation and minor readability issues. The corrected query now accurately calculates the failure rate and includes more descriptive column aliases."
+  }
+}

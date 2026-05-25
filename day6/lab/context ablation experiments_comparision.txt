@@ -1,0 +1,116 @@
+CONTEXT ABLATION EXPERIMENT — PRO vs LITE MODEL (ACTUAL RESULTS)
+
+Objective:
+To evaluate how removing different types of context (business rules, joins, few-shot examples)
+affects SQL generation in Pro vs Lite models.
+
+------------------------------------------------------------
+
+EXPERIMENT 1: Remove Revenue Business Rule
+
+Question:
+What is the net settled amount excluding held transactions?
+
+Pro Model:
+SELECT 
+  SUM(CASE WHEN STATUS = 'COMPLETED' THEN AMOUNT ELSE 0 END) 
+  - SUM(CASE WHEN STATUS = 'PENDING' THEN AMOUNT ELSE 0 END) 
+  AS NET_SETTLED_AMOUNT_USD
+FROM FACT_TRANSACTIONS
+WHERE TRANSACTION_DATE BETWEEN '2024-01-15' AND '2024-01-31';
+
+Observation:
+- Pro model tried to interpret "excluding held"
+- Subtracted PENDING transactions → more advanced reasoning
+- BUT logic may be debatable (not strictly defined in schema)
+
+Lite Model:
+SELECT SUM(AMOUNT) AS NET_SETTLED_AMOUNT_USD
+FROM FACT_TRANSACTIONS
+WHERE STATUS = 'COMPLETED';
+
+Observation:
+- Simpler and safer logic
+- Directly assumed "settled = COMPLETED"
+- No attempt to handle "held" explicitly
+
+Insight:
+- Pro = more intelligent but can overthink
+- Lite = simpler but more stable
+
+------------------------------------------------------------
+
+EXPERIMENT 2: Remove JOIN Relationship Hint
+
+Question:
+Which merchant had the most transactions?
+
+Pro Model:
+- Correct JOIN without hint
+- No date filter
+
+Lite Model:
+- Correct JOIN without hint
+- Added date filter automatically
+
+Insight:
+- BOTH models inferred join correctly
+- Lite unexpectedly added constraint (good practice)
+- Pro was simpler
+
+------------------------------------------------------------
+
+EXPERIMENT 3: Remove Few-shot Examples
+
+Question:
+Show failure rate by payment method
+
+Pro Model:
+- Correct aggregation
+- Correct percentage calculation
+
+Lite Model:
+- Same correct query generated
+
+Insight:
+- Few-shot examples NOT critical for this query
+- Both models handled aggregation well
+
+------------------------------------------------------------
+
+FINAL COMPARISON
+
+Pro Model:
+- Strong reasoning (tries to interpret complex meaning)
+- May overcomplicate logic (Experiment 1)
+- Works well even with missing context
+
+Lite Model:
+- Simpler and more direct
+- Sometimes more stable and predictable
+- Surprisingly good performance even without context
+
+------------------------------------------------------------
+
+KEY LEARNING
+
+- Removing business rules impacts BOTH models the most
+- JOIN hints are less critical (models can infer)
+- Few-shot examples help consistency but are not always required
+
+- Pro model = better reasoning, slightly risky assumptions
+- Lite model = safer, simpler, sometimes more practical
+
+------------------------------------------------------------
+
+CONCLUSION
+
+Context is important, but:
+- Models are getting strong enough to infer missing information
+- Over-reliance on intelligence (Pro) can sometimes introduce incorrect assumptions
+- Balanced prompts + validation layer is still necessary
+
+Best practice:
+Always include:
+- Business rules (most important)
+- Validation layer (to catch wrong assumptions)

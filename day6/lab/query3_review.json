@@ -1,0 +1,35 @@
+{
+  "file": "queries/query3.sql",
+  "reviewed_at": "2026-05-25T15:56:51.279446",
+  "issues_found": 3,
+  "review": {
+    "issues": [
+      {
+        "severity": "Critical",
+        "category": "Correctness",
+        "title": "Incorrect total transactions calculation",
+        "line": "7",
+        "problem": "The subquery is incorrectly calculating total transactions for each merchant, leading to inaccurate results.",
+        "fix": "Remove the subquery and use a single query with GROUP BY."
+      },
+      {
+        "severity": "Medium",
+        "category": "Performance",
+        "title": "Potential performance issue with subquery",
+        "line": "7",
+        "problem": "The correlated subquery can be inefficient as it runs for each row in the result set.",
+        "fix": "Remove the subquery and use a single query with GROUP BY."
+      },
+      {
+        "severity": "Low",
+        "category": "Readability",
+        "title": "Lack of comments",
+        "line": "1-10",
+        "problem": "The query lacks comments explaining the logic and purpose.",
+        "fix": "Add comments to explain the query logic."
+      }
+    ],
+    "corrected_sql": "SELECT m.MERCHANT_NAME, COUNT(*) AS TXN_COUNT, COUNT(*) OVER (PARTITION BY t.MERCHANT_ID) AS TOTAL_TXNS FROM FACT_TRANSACTIONS t JOIN DIM_MERCHANT m ON t.MERCHANT_ID = m.MERCHANT_ID WHERE t.STATUS = 'COMPLETED' GROUP BY m.MERCHANT_NAME, t.MERCHANT_ID ORDER BY TXN_COUNT DESC;",
+    "summary": "The query had correctness issues with the subquery, potential performance issues, and lacked readability due to missing comments."
+  }
+}

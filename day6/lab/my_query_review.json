@@ -1,0 +1,35 @@
+{
+  "file": "queries/my_query.sql",
+  "reviewed_at": "2026-05-25T15:56:32.734815",
+  "issues_found": 3,
+  "review": {
+    "issues": [
+      {
+        "severity": "Critical",
+        "category": "Correctness",
+        "title": "Incorrect revenue calculation",
+        "line": "SUM(t.AMOUNT) AS TOTAL_REVENUE",
+        "problem": "Revenue should only include transactions with status 'COMPLETED', but the query includes all transactions where status is not 'FAILED'.",
+        "fix": "SUM(CASE WHEN t.STATUS = 'COMPLETED' THEN t.AMOUNT ELSE 0 END) AS TOTAL_REVENUE"
+      },
+      {
+        "severity": "Medium",
+        "category": "Correctness",
+        "title": "Missing filter for 'COMPLETED' status",
+        "line": "WHERE t.STATUS!= 'FAILED'",
+        "problem": "The query should filter for transactions with status 'COMPLETED' to correctly calculate revenue.",
+        "fix": "WHERE t.STATUS = 'COMPLETED'"
+      },
+      {
+        "severity": "Medium",
+        "category": "Readability",
+        "title": "Inconsistent naming convention",
+        "line": "FACT_TRANSACTIONS, DIM_MERCHANT, MERCHANT_NAME",
+        "problem": "The query uses inconsistent naming conventions (uppercase vs. camelCase). It should be consistent for readability.",
+        "fix": "SELECT m.merchant_name, SUM(CASE WHEN t.status = 'COMPLETED' THEN t.amount ELSE 0 END) AS total_revenue, COUNT(*) AS total_txns"
+      }
+    ],
+    "corrected_sql": "SELECT m.merchant_name, SUM(CASE WHEN t.status = 'COMPLETED' THEN t.amount ELSE 0 END) AS total_revenue, COUNT(*) AS total_txns FROM sigma_analytics.fact_transactions t JOIN sigma_analytics.dim_merchant m ON t.merchant_id = m.merchant_id WHERE t.status = 'COMPLETED' GROUP BY m.merchant_name;",
+    "summary": "The query had critical correctness issues with revenue calculation and missing filters. It also had readability issues with inconsistent naming conventions."
+  }
+}

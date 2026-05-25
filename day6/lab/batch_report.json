@@ -1,0 +1,148 @@
+{
+  "directory": "queries/",
+  "reviewed_at": "2026-05-25T15:56:51.281245",
+  "files_reviewed": 4,
+  "total_issues": 12,
+  "files": [
+    {
+      "file": "queries/my_query.sql",
+      "reviewed_at": "2026-05-25T15:56:32.734815",
+      "issues_found": 3,
+      "review": {
+        "issues": [
+          {
+            "severity": "Critical",
+            "category": "Correctness",
+            "title": "Incorrect revenue calculation",
+            "line": "SUM(t.AMOUNT) AS TOTAL_REVENUE",
+            "problem": "Revenue should only include transactions with status 'COMPLETED', but the query includes all transactions where status is not 'FAILED'.",
+            "fix": "SUM(CASE WHEN t.STATUS = 'COMPLETED' THEN t.AMOUNT ELSE 0 END) AS TOTAL_REVENUE"
+          },
+          {
+            "severity": "Medium",
+            "category": "Correctness",
+            "title": "Missing filter for 'COMPLETED' status",
+            "line": "WHERE t.STATUS!= 'FAILED'",
+            "problem": "The query should filter for transactions with status 'COMPLETED' to correctly calculate revenue.",
+            "fix": "WHERE t.STATUS = 'COMPLETED'"
+          },
+          {
+            "severity": "Medium",
+            "category": "Readability",
+            "title": "Inconsistent naming convention",
+            "line": "FACT_TRANSACTIONS, DIM_MERCHANT, MERCHANT_NAME",
+            "problem": "The query uses inconsistent naming conventions (uppercase vs. camelCase). It should be consistent for readability.",
+            "fix": "SELECT m.merchant_name, SUM(CASE WHEN t.status = 'COMPLETED' THEN t.amount ELSE 0 END) AS total_revenue, COUNT(*) AS total_txns"
+          }
+        ],
+        "corrected_sql": "SELECT m.merchant_name, SUM(CASE WHEN t.status = 'COMPLETED' THEN t.amount ELSE 0 END) AS total_revenue, COUNT(*) AS total_txns FROM sigma_analytics.fact_transactions t JOIN sigma_analytics.dim_merchant m ON t.merchant_id = m.merchant_id WHERE t.status = 'COMPLETED' GROUP BY m.merchant_name;",
+        "summary": "The query had critical correctness issues with revenue calculation and missing filters. It also had readability issues with inconsistent naming conventions."
+      }
+    },
+    {
+      "file": "queries/query1.sql",
+      "reviewed_at": "2026-05-25T15:56:39.905415",
+      "issues_found": 3,
+      "review": {
+        "issues": [
+          {
+            "severity": "Critical",
+            "category": "Correctness",
+            "title": "Incorrect revenue calculation",
+            "line": "SUM(t.AMOUNT) AS TOTAL_REVENUE",
+            "problem": "Revenue should only include transactions with status 'COMPLETED', but the query includes all transactions where status is not 'FAILED'.",
+            "fix": "SUM(CASE WHEN t.STATUS = 'COMPLETED' THEN t.AMOUNT ELSE 0 END) AS TOTAL_REVENUE"
+          },
+          {
+            "severity": "Medium",
+            "category": "Correctness",
+            "title": "Missing filter for 'COMPLETED' status",
+            "line": "WHERE t.STATUS!= 'FAILED'",
+            "problem": "The query should filter transactions where status is 'COMPLETED' to correctly calculate revenue.",
+            "fix": "WHERE t.STATUS = 'COMPLETED'"
+          },
+          {
+            "severity": "Low",
+            "category": "Readability",
+            "title": "Inconsistent naming convention",
+            "line": "FACT_TRANSACTIONS, DIM_MERCHANT, MERCHANT_NAME, AMOUNT, TOTAL_REVENUE, TOTAL_TXNS",
+            "problem": "The query uses inconsistent naming conventions (e.g., FACT_TRANSACTIONS vs. m.MERCHANT_NAME). It should be consistent, either all uppercase or all lowercase.",
+            "fix": "SELECT m.merchant_name, SUM(t.amount) AS total_revenue, COUNT(*) AS total_txns FROM fact_transactions t JOIN dim_merchant m ON t.merchant_id = m.merchant_id WHERE t.status = 'COMPLETED' GROUP BY m.merchant_name;"
+          }
+        ],
+        "corrected_sql": "SELECT m.merchant_name, SUM(CASE WHEN t.status = 'COMPLETED' THEN t.amount ELSE 0 END) AS total_revenue, COUNT(*) AS total_txns FROM fact_transactions t JOIN dim_merchant m ON t.merchant_id = m.merchant_id WHERE t.status = 'COMPLETED' GROUP BY m.merchant_name;",
+        "summary": "The query had critical correctness issues with revenue calculation and missing filter for 'COMPLETED' status. It also had a readability issue with inconsistent naming conventions."
+      }
+    },
+    {
+      "file": "queries/query2.sql",
+      "reviewed_at": "2026-05-25T15:56:45.701821",
+      "issues_found": 3,
+      "review": {
+        "issues": [
+          {
+            "severity": "Critical",
+            "category": "Correctness",
+            "title": "Incorrect failure rate calculation",
+            "line": "line 8",
+            "problem": "The failure rate calculation is incorrect because it uses the total count of transactions instead of only completed transactions.",
+            "fix": "SUM(CASE WHEN STATUS = 'COMPLETED' THEN 1 ELSE 0 END)"
+          },
+          {
+            "severity": "Medium",
+            "category": "Readability",
+            "title": "Lack of comments",
+            "line": "entire query",
+            "problem": "The query lacks comments explaining the logic, making it harder to understand.",
+            "fix": "-- Add comments explaining the logic of each part of the query"
+          },
+          {
+            "severity": "Low",
+            "category": "Readability",
+            "title": "Column aliases should be more descriptive",
+            "line": "line 3",
+            "problem": "The column aliases could be more descriptive for better readability.",
+            "fix": "COUNT(*) AS TOTAL_TRANSACTIONS, SUM(CASE WHEN STATUS = 'FAILED' THEN 1 ELSE 0 END) AS FAILED_TRANSACTIONS"
+          }
+        ],
+        "corrected_sql": "-- Payment method performance (corrected)\n\nSELECT \n    PAYMENT_METHOD,\n    COUNT(*) AS TOTAL_TRANSACTIONS,\n    SUM(CASE WHEN STATUS = 'FAILED' THEN 1 ELSE 0 END) AS FAILED_TRANSACTIONS,\n    (SUM(CASE WHEN STATUS = 'FAILED' THEN 1 ELSE 0 END) * 100 / COUNT(*)) AS FAILURE_RATE\nFROM FACT_TRANSACTIONS\nGROUP BY PAYMENT_METHOD\nHAVING COUNT(*) > 0;",
+        "summary": "The query had a critical correctness issue with the failure rate calculation and minor readability issues. The corrected query now accurately calculates the failure rate and includes more descriptive column aliases."
+      }
+    },
+    {
+      "file": "queries/query3.sql",
+      "reviewed_at": "2026-05-25T15:56:51.279446",
+      "issues_found": 3,
+      "review": {
+        "issues": [
+          {
+            "severity": "Critical",
+            "category": "Correctness",
+            "title": "Incorrect total transactions calculation",
+            "line": "7",
+            "problem": "The subquery is incorrectly calculating total transactions for each merchant, leading to inaccurate results.",
+            "fix": "Remove the subquery and use a single query with GROUP BY."
+          },
+          {
+            "severity": "Medium",
+            "category": "Performance",
+            "title": "Potential performance issue with subquery",
+            "line": "7",
+            "problem": "The correlated subquery can be inefficient as it runs for each row in the result set.",
+            "fix": "Remove the subquery and use a single query with GROUP BY."
+          },
+          {
+            "severity": "Low",
+            "category": "Readability",
+            "title": "Lack of comments",
+            "line": "1-10",
+            "problem": "The query lacks comments explaining the logic and purpose.",
+            "fix": "Add comments to explain the query logic."
+          }
+        ],
+        "corrected_sql": "SELECT m.MERCHANT_NAME, COUNT(*) AS TXN_COUNT, COUNT(*) OVER (PARTITION BY t.MERCHANT_ID) AS TOTAL_TXNS FROM FACT_TRANSACTIONS t JOIN DIM_MERCHANT m ON t.MERCHANT_ID = m.MERCHANT_ID WHERE t.STATUS = 'COMPLETED' GROUP BY m.MERCHANT_NAME, t.MERCHANT_ID ORDER BY TXN_COUNT DESC;",
+        "summary": "The query had correctness issues with the subquery, potential performance issues, and lacked readability due to missing comments."
+      }
+    }
+  ]
+}

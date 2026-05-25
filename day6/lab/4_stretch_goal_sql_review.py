@@ -38,7 +38,7 @@ WHERE THIS FITS:
   Day 10: LangGraph agent calls this as a TOOL autonomously
 
 HOW TO RUN:
-  python stretch_goal_sql_review.py queries/
+  python3 stretch_goal_sql_review.py queries/
 """
 
 import sys
@@ -163,3 +163,17 @@ if __name__ == "__main__":
     else:
         print(f"Error: '{target}' is not a .sql file or directory")
         sys.exit(1)
+
+
+
+# I created a SQL query with intentional bugs:
+# - Incorrect revenue logic (included non-completed transactions)
+# - Missing proper status filter
+# - No comments
+
+# The AI successfully detected the correctness issues and suggested fixes.
+# However, it missed performance-related issues like absence of filtering
+# (e.g., date constraints) and gave slightly redundant feedback.
+
+# This shows that the agent is strong in business logic validation but
+# still needs improvement in performance analysis and precision.

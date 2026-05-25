@@ -23,7 +23,7 @@ WHERE THIS FITS IN THE PLATFORM:
 ═══════════════════════════════════════════════════════════════
 
 HOW TO RUN:
-  python 3_dbt_generator.py
+  python3 3_dbt_generator.py
 
 GENERATES:
   sigma_dbt/

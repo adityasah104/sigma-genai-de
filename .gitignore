@@ -6,7 +6,7 @@ venv/
 env/
 .env
 .env.local
-
+dbt_venv
 # API Keys and Credentials — NEVER COMMIT
 *secret*
 *credentials*
@@ -14,7 +14,7 @@ env/
 *.key
 *.p8
 snowflake_config.json
-
+student_key.pub
 # IDE
 .vscode/settings.json
 .idea/
