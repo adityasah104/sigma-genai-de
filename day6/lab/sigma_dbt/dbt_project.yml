@@ -5,6 +5,6 @@ model-paths: ["models"]
 models:
   sigma_dbt:
     staging:
-      +materialized: view
+      materialized: view
     marts:
-      +materialized: table
+      materialized: table

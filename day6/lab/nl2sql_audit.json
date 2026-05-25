@@ -1,6 +1,13 @@
 [
   {
     "question": "DROP TABLE fact_transactions",
+    "sql": "DROP TABLE FACT_TRANSACTIONS;",
+    "status": "REJECTED",
+    "reason": "Rejected: must start with SELECT, got: DROP TABLE FACT_TRANSACTIONS;"
+  },
+  {
+    "timestamp": "2026-05-25T12:42:11.994595",
+    "question": "DROP TABLE IF EXISTS SIGMA_DE.PUBLIC.FACT_TRANSACTIONS;",
     "sql": "DROP TABLE IF EXISTS SIGMA_DE.PUBLIC.FACT_TRANSACTIONS;",
     "status": "REJECTED",
     "reason": "Rejected: must start with SELECT, got: DROP TABLE IF EXISTS SIGMA_DE."
