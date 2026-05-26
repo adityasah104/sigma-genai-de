@@ -1,6 +1,7 @@
+from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
+from airflow.utils.email import send_email_smtp
 import logging
 import json
 
@@ -12,36 +13,42 @@ default_args = {
 }
 
 def on_failure_callback(context):
-    """Logs failure details."""
     dag_id = context['dag'].dag_id
     task_id = context['task_instance'].task_id
     execution_date = context['execution_date']
     error_message = context['exception']
-    logging.error(f"DAG: {dag_id}, Task: {task_id}, Execution Date: {execution_date}, Error: {error_message}")
+    logging.error(f"Dag ID: {dag_id}, Task ID: {task_id}, Execution Date: {execution_date}, Error: {error_message}")
+    send_email_smtp(to='alerts@example.com', subject=f"Airflow Task Failed - {dag_id}", html_content=f"Task {task_id} failed on {execution_date}. Error: {error_message}")
 
 def sla_miss_callback(context):
-    """Sends alert for SLA miss."""
     dag_id = context['dag'].dag_id
     execution_date = context['execution_date']
-    logging.warning(f"DAG: {dag_id}, Execution Date: {execution_date}, SLA Miss")
+    logging.error(f"Dag ID: {dag_id}, Execution Date: {execution_date}, SLA Miss")
+    send_email_smtp(to='alerts@example.com', subject=f"Airflow SLA Miss - {dag_id}", html_content=f"SLA miss for DAG {dag_id} on {execution_date}")
 
 def extract_bronze(**context):
-    """Ingest raw CSVs to Bronze Parquet."""
-    logging.info("Starting extract_bronze task")
-    # Add your code here
-    logging.info("Ending extract_bronze task")
+    """Ingest raw CSVs to Bronze Parquet"""
+    ti = context['task_instance']
+    ti.xcom_push(key='run_id', value=ti.run_id)
+    logging.info(f"{ti} - Extracting Bronze layer started")
+    # Implement CSV to Parquet transformation here
+    logging.info(f"{ti} - Extracting Bronze layer completed")
 
 def transform_silver(**context):
-    """Clean, enrich, deduplicate to Silver."""
-    logging.info("Starting transform_silver task")
-    # Add your code here
-    logging.info("Ending transform_silver task")
+    """Clean, enrich, deduplicate to Silver"""
+    ti = context['task_instance']
+    run_id = ti.xcom_pull(task_ids='extract_bronze', key='run_id')
+    logging.info(f"{ti} - Transforming Silver layer started with run_id: {run_id}")
+    # Implement Silver layer transformation here
+    logging.info(f"{ti} - Transforming Silver layer completed")
 
 def build_gold(**context):
-    """Generate the 3 Gold aggregation tables."""
-    logging.info("Starting build_gold task")
-    # Add your code here
-    logging.info("Ending build_gold task")
+    """Generate the 3 Gold aggregation tables"""
+    ti = context['task_instance']
+    run_id = ti.xcom_pull(task_ids='transform_silver', key='run_id')
+    logging.info(f"{ti} - Building Gold layer started with run_id: {run_id}")
+    # Implement Gold layer transformation here
+    logging.info(f"{ti} - Building Gold layer completed")
 
 with DAG(
     dag_id='sigma_transaction_pipeline',
