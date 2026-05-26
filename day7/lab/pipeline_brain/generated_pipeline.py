@@ -13,67 +13,94 @@ Architecture: Bronze -> Silver -> Gold (medallion pattern)
 # SECTION 1: BRONZE + SILVER LAYERS
 # ═══════════════════════════════════════════════════════════════
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, broadcast, when
+from pyspark.sql.functions import col, lit, broadcast, when, input_file_name
 from pyspark.sql.types import FloatType, StringType, DateType
 import json
+import logging
 import os
 
+# ── LOGGING SETUP ─────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("sigma_pipeline")
+
 def ingest_bronze(spark, input_path, output_path, run_date, run_id):
-    # Read raw CSV files with all columns as strings
-    transactions_df = (spark.read.format("csv")
-                      .option("header", "true")
-                       .option("inferSchema", "false")
-                       .load(input_path))
-    
-    # Add metadata columns
-    transactions_df = (transactions_df.withColumn("ingestion_timestamp", lit(run_date))
-                      .withColumn("source_file", lit("transactions.csv"))
-                       .withColumn("pipeline_run_id", lit(run_id)))
-    
-    # Write as Parquet partitioned by date
-    transactions_df.write.mode("overwrite").partitionBy("ingestion_timestamp").parquet(output_path)
+    # FIX #2 (ERROR_HANDLING): Wrapped in try/except — re-raise so pipeline fails fast
+    try:
+        logger.info(f"[Bronze] Starting ingestion | input={input_path} | run_date={run_date}")
+
+        # Read raw CSV files with all columns as strings
+        transactions_df = (spark.read.format("csv")
+                          .option("header", "true")
+                           .option("inferSchema", "false")
+                           .load(input_path))
+
+        # Add metadata columns
+        transactions_df = (transactions_df.withColumn("ingestion_timestamp", lit(run_date))
+                          .withColumn("source_file", input_file_name())
+                           .withColumn("pipeline_run_id", lit(run_id)))
+
+        # Write as Parquet partitioned by date
+        transactions_df.write.mode("overwrite").partitionBy("ingestion_timestamp").parquet(output_path)
+        logger.info(f"[Bronze] Ingestion complete | output={output_path}")
+
+    except Exception as e:
+        logger.error(f"[Bronze] Stage FAILED | run_date={run_date} | error={e}")
+        raise
 
 def transform_silver(spark, bronze_path, merchants_path, output_path, run_date):
-    # Read Bronze Parquet with partition pruning on run_date
-    transactions_df = (spark.read.format("parquet")
-                       .load(f"{bronze_path}/ingestion_timestamp={run_date}"))
-    
-    # Cast columns to correct types
-    transactions_df = (transactions_df.withColumn("amount", col("amount").cast(FloatType()))
-                       .withColumn("transaction_date", col("transaction_date").cast(DateType()))
-                      .withColumn("transaction_id", col("transaction_id").cast(StringType()))
-                       .withColumn("merchant_id", col("merchant_id").cast(StringType())))
-    
-    # Filter: remove records where transaction_id is NULL or amount < 0
-    transactions_df = transactions_df.filter((col("transaction_id").isNotNull()) & (col("amount") >= 0))
-    
-    # Deduplicate: if same transaction_id appears twice, keep the record with latest ingestion_timestamp
-    transactions_df = transactions_df.withColumn("rank", 
-                                                  when(col("ingestion_timestamp").isNotNull(), 
-                                                       col("ingestion_timestamp").cast("long")).otherwise(0).alias("rank"))
-    transactions_df = transactions_df.withColumn("row_number", 
-                                                 f.row_number().over(Window.partitionBy("transaction_id").orderBy(col("rank").desc())))
-    transactions_df = transactions_df.filter(col("row_number") == 1).drop("rank", "row_number")
-    
-    # Read merchants data and cache it
-    merchants_df = (spark.read.format("csv")
-                   .option("header", "true")
-                   .option("inferSchema", "false")
-                   .load(merchants_path))
-    merchants_df = merchants_df.withColumn("merchant_id", col("merchant_id").cast(StringType()))
-    merchants_df = merchants_df.cache()
-    
-    # Enrich: join transactions with merchants on merchant_id
-    enriched_df = (transactions_df.join(broadcast(merchants_df), 
-                                         on=col("transactions_df.merchant_id") == col("merchants_df.merchant_id"), 
-                                         how="left_outer"))
-    
-    # Add quality flag: mark records with no matching merchant as 'UNMATCHED'
-    enriched_df = enriched_df.withColumn("quality_flag", 
-                                         when(col("merchant_id").isNotNull(), "CLEAN").otherwise("UNMATCHED"))
-    
-    # Write as Parquet partitioned by date
-    enriched_df.write.mode("overwrite").partitionBy("transaction_date").parquet(output_path)
+    # FIX #2 (ERROR_HANDLING): Wrapped in try/except — re-raise so pipeline fails fast
+    try:
+        logger.info(f"[Silver] Starting transformation | run_date={run_date}")
+
+        # Read Bronze Parquet with partition pruning on run_date
+        transactions_df = (spark.read.format("parquet")
+                           .load(os.path.join(bronze_path, f"ingestion_timestamp={run_date}")))
+
+        # Cast columns to correct types
+        transactions_df = (transactions_df.withColumn("amount", col("amount").cast(FloatType()))
+                           .withColumn("transaction_date", col("transaction_date").cast(DateType()))
+                          .withColumn("transaction_id", col("transaction_id").cast(StringType()))
+                           .withColumn("merchant_id", col("merchant_id").cast(StringType())))
+
+        # Filter: remove records where transaction_id is NULL or amount < 0
+        transactions_df = transactions_df.filter((col("transaction_id").isNotNull()) & (col("amount") >= 0))
+
+        # Deduplicate: if same transaction_id appears twice, keep the record with latest ingestion_timestamp
+        transactions_df = transactions_df.withColumn("rank",
+                                                      when(col("ingestion_timestamp").isNotNull(),
+                                                           col("ingestion_timestamp").cast("long")).otherwise(0).alias("rank"))
+        transactions_df = transactions_df.withColumn("row_number",
+                                                     f.row_number().over(Window.partitionBy("transaction_id").orderBy(col("rank").desc())))
+        transactions_df = transactions_df.filter(col("row_number") == 1).drop("rank", "row_number")
+
+        # Read merchants data and cache it
+        merchants_df = (spark.read.format("csv")
+                       .option("header", "true")
+                       .option("inferSchema", "false")
+                       .load(merchants_path))
+        merchants_df = merchants_df.withColumn("merchant_id", col("merchant_id").cast(StringType()))
+        merchants_df = merchants_df.cache()
+
+        # Enrich: join transactions with merchants on merchant_id
+        enriched_df = (transactions_df.join(broadcast(merchants_df),
+                                             on=col("transactions_df.merchant_id") == col("merchants_df.merchant_id"),
+                                             how="left_outer"))
+
+        # Add quality flag: mark records with no matching merchant as 'UNMATCHED'
+        enriched_df = enriched_df.withColumn("quality_flag",
+                                             when(col("merchant_id").isNotNull(), "CLEAN").otherwise("UNMATCHED"))
+
+        # Write as Parquet partitioned by date
+        enriched_df.write.mode("overwrite").partitionBy("transaction_date").parquet(output_path)
+        logger.info(f"[Silver] Transformation complete | output={output_path}")
+
+    except Exception as e:
+        logger.error(f"[Silver] Stage FAILED | run_date={run_date} | error={e}")
+        raise
 
 def main():
     # Initialize Spark session
@@ -81,13 +108,17 @@ def main():
             .appName("Sigma DataTech Transaction Analytics Pipeline")
              .getOrCreate())
     
-    # Define paths and run metadata
-    input_path = "s3://sigma-datatech-raw/transactions/"
-    bronze_path = "s3://sigma-datatech-bronze/transactions/"
-    merchants_path = "s3://sigma-datatech-bronze/merchants/"
-    silver_path = "s3://sigma-datatech-silver/transactions/"
-    run_date = "2026-05-27"
-    run_id = "run_id_12345"
+    # Define paths and run metadata from environment variables
+    # (Assuming environment is populated via Docker, Airflow, or python-dotenv)
+    
+    # Define paths and run metadata from environment variables
+    input_path = os.environ["INPUT_PATH"]
+    bronze_path = os.environ["BRONZE_PATH"]
+    merchants_path = os.environ["MERCHANTS_PATH"]
+    silver_path = os.environ["SILVER_PATH"]
+    metadata_path = os.environ["METADATA_PATH"]
+    run_date = os.environ["RUN_DATE"]
+    run_id = os.environ["RUN_ID"]
     
     # Ingest Bronze layer
     ingest_bronze(spark, input_path, bronze_path, run_date, run_id)
@@ -98,7 +129,8 @@ def main():
     # Log run metadata summary to a JSON file
     run_metadata = {"run_date": run_date, "run_id": run_id, "input_path": input_path, 
                     "bronze_path": bronze_path, "silver_path": silver_path}
-    with open(f"s3://sigma-datatech-metadata/run_metadata_{run_date}.json", "w") as f:
+    metadata_file = os.path.join(metadata_path, f"run_metadata_{run_date}.json")
+    with open(metadata_file, "w") as f:
         json.dump(run_metadata, f)
 
 if __name__ == "__main__":
@@ -113,55 +145,82 @@ from pyspark.sql.functions import col, sum, count, max, broadcast, when, mode, c
 from pyspark.sql.types import StructType, StructField, StringType, FloatType, DateType
 
 def build_merchant_performance(spark, silver_path, output_path, run_date):
-    # Read Silver layer data
-    silver_df = spark.read.parquet(silver_path).filter(col("date") == run_date)
-    
-    # Calculate total revenue, transaction count, and failure rate
-    merchant_performance_df = silver_df.groupBy("merchant_id", "merchant_name", "category", "city", "date") \
-       .agg(
-            sum(when(col("status") == "COMPLETED", col("amount")).otherwise(0)).alias("total_revenue"),
-            count("*").alias("txn_count"),
-            (count(when(col("status") == "FAILED", 1)) / count("*") * 100).alias("failure_rate_pct")
-        )
-    
-    # Write Gold layer merchant performance table
-    merchant_performance_df.write.mode("overwrite").partitionBy("date").parquet(output_path + "/merchant_performance")
+    # FIX #2 (ERROR_HANDLING): Wrapped in try/except — re-raise so pipeline fails fast
+    try:
+        logger.info(f"[Gold:merchant_performance] Starting | run_date={run_date}")
+
+        # Read Silver layer data
+        silver_df = spark.read.parquet(silver_path).filter(col("date") == run_date)
+
+        # Calculate total revenue, transaction count, and failure rate
+        merchant_performance_df = silver_df.groupBy("merchant_id", "merchant_name", "category", "city", "date") \
+           .agg(
+                sum(when(col("status") == "COMPLETED", col("amount")).otherwise(0)).alias("total_revenue"),
+                count("*").alias("txn_count"),
+                (count(when(col("status") == "FAILED", 1)) / count("*") * 100).alias("failure_rate_pct")
+            )
+
+        # Write Gold layer merchant performance table
+        merchant_performance_df.write.mode("overwrite").partitionBy("date").parquet(os.path.join(output_path, "merchant_performance"))
+        logger.info("[Gold:merchant_performance] Complete")
+
+    except Exception as e:
+        logger.error(f"[Gold:merchant_performance] Stage FAILED | run_date={run_date} | error={e}")
+        raise
 
 def build_customer_ltv(spark, silver_path, output_path):
-    # Read Silver layer data
-    silver_df = spark.read.parquet(silver_path)
-    
-    # Calculate customer LTV metrics
-    customer_ltv_df = silver_df.filter(col("status") == "COMPLETED") \
-        .groupBy("customer_id") \
-       .agg(
-            sum("amount").alias("total_spent"),
-            count("*").alias("total_txns"),
-            avg("amount").alias("avg_txn_value"),
-            min("transaction_date").alias("first_txn_date"),
-            max("transaction_date").alias("last_txn_date"),
-            coalesce(mode("payment_method").over(windowSpec), lit(None)).alias("preferred_payment_method")
-        )
-    
-    # Write Gold layer customer LTV table
-    customer_ltv_df.write.parquet(output_path + "/customer_ltv")
+    # FIX #2 (ERROR_HANDLING): Wrapped in try/except — re-raise so pipeline fails fast
+    try:
+        logger.info("[Gold:customer_ltv] Starting")
+
+        # Read Silver layer data
+        silver_df = spark.read.parquet(silver_path)
+
+        # Calculate customer LTV metrics
+        customer_ltv_df = silver_df.filter(col("status") == "COMPLETED") \
+            .groupBy("customer_id") \
+           .agg(
+                sum("amount").alias("total_spent"),
+                count("*").alias("total_txns"),
+                avg("amount").alias("avg_txn_value"),
+                min("transaction_date").alias("first_txn_date"),
+                max("transaction_date").alias("last_txn_date"),
+                coalesce(mode("payment_method").over(windowSpec), lit(None)).alias("preferred_payment_method")
+            )
+
+        # Write Gold layer customer LTV table
+        customer_ltv_df.write.parquet(os.path.join(output_path, "customer_ltv"))
+        logger.info("[Gold:customer_ltv] Complete")
+
+    except Exception as e:
+        logger.error(f"[Gold:customer_ltv] Stage FAILED | error={e}")
+        raise
 
 def build_daily_summary(spark, silver_path, output_path, run_date):
-    # Read Silver layer data
-    silver_df = spark.read.parquet(silver_path).filter(col("date") == run_date)
-    
-    # Calculate daily summary metrics
-    daily_summary_df = silver_df.groupBy("date") \
-        .agg(
-            sum(when(col("status") == "COMPLETED", col("amount")).otherwise(0)).alias("total_revenue"),
-            count("*").alias("total_txns"),
-            countDistinct("customer_id").alias("unique_customers"),
-            countDistinct("merchant_id").alias("unique_merchants"),
-            (count(when(col("status") == "FAILED", 1)) / count("*") * 100).alias("failure_rate_pct")
-        )
-    
-    # Write Gold layer daily summary table
-    daily_summary_df.write.mode("overwrite").partitionBy("date").parquet(output_path + "/daily_summary")
+    # FIX #2 (ERROR_HANDLING): Wrapped in try/except — re-raise so pipeline fails fast
+    try:
+        logger.info(f"[Gold:daily_summary] Starting | run_date={run_date}")
+
+        # Read Silver layer data
+        silver_df = spark.read.parquet(silver_path).filter(col("date") == run_date)
+
+        # Calculate daily summary metrics
+        daily_summary_df = silver_df.groupBy("date") \
+            .agg(
+                sum(when(col("status") == "COMPLETED", col("amount")).otherwise(0)).alias("total_revenue"),
+                count("*").alias("total_txns"),
+                countDistinct("customer_id").alias("unique_customers"),
+                countDistinct("merchant_id").alias("unique_merchants"),
+                (count(when(col("status") == "FAILED", 1)) / count("*") * 100).alias("failure_rate_pct")
+            )
+
+        # Write Gold layer daily summary table
+        daily_summary_df.write.mode("overwrite").partitionBy("date").parquet(os.path.join(output_path, "daily_summary"))
+        logger.info("[Gold:daily_summary] Complete")
+
+    except Exception as e:
+        logger.error(f"[Gold:daily_summary] Stage FAILED | run_date={run_date} | error={e}")
+        raise
 
 def run_gold(spark, silver_path, gold_output_dir, run_date):
     # Build Gold layer tables
@@ -176,7 +235,7 @@ def run_gold(spark, silver_path, gold_output_dir, run_date):
         "gold_output_dir": gold_output_dir,
         "status": "success"
     }
-    spark.sparkContext.parallelize([run_metadata]).write.json(gold_output_dir + "/run_metadata")
+    spark.sparkContext.parallelize([run_metadata]).write.json(os.path.join(gold_output_dir, "run_metadata"))
 
 # Initialize Spark session
 spark = SparkSession.builder.appName("Sigma DataTech Transaction Analytics Pipeline").getOrCreate()
