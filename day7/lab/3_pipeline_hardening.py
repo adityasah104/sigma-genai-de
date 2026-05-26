@@ -31,7 +31,7 @@ WHERE THIS FITS IN THE PLATFORM:
 
 HOW TO RUN:
   cd repo/day7/lab
-  python 3_pipeline_hardening.py
+  python3 3_pipeline_hardening.py
   (Run AFTER Module 1 — reads pipeline_brain/generated_pipeline.py)
 
 OUTPUT:

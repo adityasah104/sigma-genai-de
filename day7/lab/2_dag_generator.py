@@ -32,7 +32,7 @@ WHERE THIS FITS IN THE PLATFORM:
 
 HOW TO RUN:
   cd repo/day7/lab
-  python 2_dag_generator.py
+  python3 2_dag_generator.py
 
 OUTPUT:
   pipeline_brain/sigma_dag.py         <- the Airflow DAG file

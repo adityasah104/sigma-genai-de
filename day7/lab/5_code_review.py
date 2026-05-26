@@ -26,7 +26,7 @@ WHERE THIS FITS:
   Day 10: An autonomous agent runs this before deciding to deploy
 
 HOW TO RUN:
-  python 5_code_review.py
+  python3 5_code_review.py
 ═══════════════════════════════════════════════════════════════
 """
 

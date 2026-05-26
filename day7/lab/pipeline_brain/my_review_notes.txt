@@ -1,0 +1,174 @@
+============================================================
+  PIPELINE CODE REVIEW NOTES
+  Reviewer  : Aditya
+  Date      : 2026-05-26
+  Source    : pipeline_brain/generated_pipeline.py
+  Fixed File: pipeline_brain/fixed_pipeline.py
+  Reference : pipeline_brain/code_review.json
+============================================================
+
+────────────────────────────────────────────────────────────
+FAIL ITEM #2 — ERROR_HANDLING
+────────────────────────────────────────────────────────────
+STATUS   : FAIL → FIXED
+FINDING  : No try/except blocks around pipeline stages.
+           If Bronze fails, Silver still tries to run on
+           missing data. No log tells you WHICH stage broke
+           or WHY. Silent crash with no actionable message.
+
+WHAT I CHANGED:
+  1. Added `import logging` and configured a module-level
+     logger with timestamp + level format:
+       logging.basicConfig(level=logging.INFO, ...)
+       logger = logging.getLogger("sigma_pipeline")
+
+  2. Wrapped the full body of EVERY stage function in
+     try / except Exception as e / raise:
+       - ingest_bronze()
+       - transform_silver()
+       - build_merchant_performance()
+       - build_customer_ltv()
+       - build_daily_summary()
+
+  3. Each except block logs:
+       logger.error(f"[Stage] Stage FAILED | run_date=... | error=...")
+     Then re-raises the exception. We do NOT swallow it —
+     fail-fast is mandatory for financial pipelines.
+
+  4. Replaced all print() calls with logger.info() so
+     output goes through the logging system, not stdout.
+
+WHY RE-RAISE AND NOT CATCH-AND-CONTINUE:
+  If Bronze fails and we catch silently, Silver will read
+  a stale or missing partition and write corrupt Gold data.
+  In compliance pipelines, corrupt output is WORSE than
+  no output. Always fail loud.
+
+────────────────────────────────────────────────────────────
+FAIL ITEM #8 — HARDCODED_PATHS
+────────────────────────────────────────────────────────────
+STATUS   : FAIL → FIXED
+FINDING  : All S3 paths and run parameters are hardcoded
+           strings inside main(). The pipeline cannot be
+           re-used for a different date, environment, or
+           bucket without editing source code.
+
+ORIGINAL (WRONG):
+  input_path  = "s3://sigma-datatech-raw/transactions/"
+  bronze_path = "s3://sigma-datatech-bronze/transactions/"
+  run_date    = "2026-05-27"
+  run_id      = "run_id_12345"
+
+WHAT I CHANGED:
+  Replaced all 6 hardcoded values with argparse CLI args:
+    --input-path
+    --bronze-path
+    --merchants-path
+    --silver-path
+    --run-date
+    --run-id
+
+  All are marked required=True so the pipeline fails
+  immediately with a clear message if any is missing.
+
+HOW TO RUN NOW:
+  spark-submit fixed_pipeline.py \
+    --input-path     s3://sigma-datatech-raw/transactions/ \
+    --bronze-path    s3://sigma-datatech-bronze/transactions/ \
+    --merchants-path s3://sigma-datatech-bronze/merchants/ \
+    --silver-path    s3://sigma-datatech-silver/transactions/ \
+    --run-date       2026-05-27 \
+    --run-id         run_20260527_001
+
+  This makes the pipeline fully parameterised — the same
+  file runs for any date, any environment (dev/staging/prod)
+  just by changing the arguments. No code edits needed.
+
+────────────────────────────────────────────────────────────
+BONUS FIXES (found during review, fixed in fixed_pipeline.py)
+────────────────────────────────────────────────────────────
+
+B1. MISSING IMPORTS (would crash at runtime with NameError)
+  ORIGINAL: Used f.row_number(), Window — 'f' and 'Window'
+            never imported. NameError at Silver stage.
+  FIXED   : Added proper imports at top of file:
+              from pyspark.sql import SparkSession, Window
+              from pyspark.sql.functions import row_number, ...
+
+B2. SILENT quality_flag BUG (wrong output, no error)
+  ORIGINAL: when(col("merchant_id").isNotNull(), "CLEAN")
+            merchant_id is from the LEFT side of a left join
+            — it is NEVER null. Every record stamped CLEAN
+            even when no merchant matched. Silent wrong data.
+  FIXED   : when(col("merchant_name").isNotNull(), "CLEAN")
+            merchant_name is from the RIGHT (merchants) side
+            — genuinely null when no match found.
+
+B3. ingestion_timestamp SET TO A CONSTANT STRING
+  ORIGINAL: .withColumn("ingestion_timestamp", lit(run_date))
+            All rows get the same string "2026-05-27".
+            Deduplication sorts by this column DESC — all
+            tied → arbitrary row kept → wrong dedup result.
+  FIXED   : .withColumn("ingestion_timestamp", current_timestamp())
+            Each row gets a real, unique timestamp.
+
+B4. source_file_name HARDCODED STRING
+  ORIGINAL: .withColumn("source_file", lit("transactions.csv"))
+            Same static string for every file. Useless for
+            multi-file ingestion or debugging bad source files.
+  FIXED   : .withColumn("source_file_name", input_file_name())
+            Captures the actual source file path per record.
+
+B5. open("s3://...") INVALID IN PYTHON
+  ORIGINAL: with open("s3://sigma-datatech-metadata/...", "w")
+            Python's built-in open() cannot write to S3 URIs.
+            This would throw FileNotFoundError at runtime.
+  FIXED   : Write metadata to a local file path instead.
+            For true S3 writes, use boto3 or spark write.
+
+B6. mode() FUNCTION DOES NOT EXIST IN PYSPARK
+  ORIGINAL: mode("payment_method").over(windowSpec)
+            PySpark has no mode() aggregate. AnalysisException.
+  FIXED   : first("payment_method", ignorenulls=True)
+            Returns the most-seen value after sorting by count
+            (acceptable approximation for preferred_method).
+
+B7. sparkContext.parallelize().write INVALID API
+  ORIGINAL: spark.sparkContext.parallelize([dict]).write.json(...)
+            parallelize() returns an RDD. RDDs have no .write
+            attribute — that is a DataFrame API. TypeError.
+  FIXED   : spark.createDataFrame([dict]).write.mode(...).json(...)
+
+B8. sum/max/min SHADOWING PYTHON BUILTINS
+  ORIGINAL: from pyspark.sql.functions import sum, max, min
+            This replaces Python's built-in sum(), max(), min()
+            for the entire module — subtle bugs elsewhere.
+  FIXED   : Aliased on import:
+              from pyspark.sql.functions import (
+                  sum as spark_sum,
+                  max as spark_max,
+                  min as spark_min, ...)
+
+────────────────────────────────────────────────────────────
+SUMMARY TABLE
+────────────────────────────────────────────────────────────
+
+  ID  | Name              | Original | Fixed
+  ----|-------------------|----------|-------
+   2  | ERROR_HANDLING    | FAIL     | FIXED
+   8  | HARDCODED_PATHS   | FAIL     | FIXED
+  B1  | MISSING IMPORTS   | CRASH    | FIXED
+  B2  | quality_flag BUG  | SILENT   | FIXED
+  B3  | ingestion_ts BUG  | SILENT   | FIXED
+  B4  | source_file BUG   | WRONG    | FIXED
+  B5  | open(s3://)       | CRASH    | FIXED
+  B6  | mode() function   | CRASH    | FIXED
+  B7  | RDD .write        | CRASH    | FIXED
+  B8  | builtin shadowing | SUBTLE   | FIXED
+
+OVERALL VERDICT: The generated_pipeline.py had 2 FAIL items
+from code_review.json + 8 additional bugs. All fixed in
+fixed_pipeline.py. The pipeline is now structurally sound
+and ready for hardening (Module 3) and test generation (Day 8).
+
+============================================================

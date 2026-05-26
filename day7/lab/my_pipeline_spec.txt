@@ -1,0 +1,101 @@
+OBJECTIVE:
+Build a daily audit pipeline that tracks all transactions for RBI compliance by flagging high-value transactions (> ₹50,000) and generating payment-method-wise daily summaries for reporting and review.
+
+DATA SOURCES:
+transactions table — Parquet/CSV — ~1M rows/day
+Columns: transaction_id, customer_id, amount, payment_method, status, transaction_timestamp
+
+BRONZE LAYER:
+Columns to ingest:
+- transaction_id
+- customer_id
+- amount
+- payment_method
+- status
+- transaction_timestamp
+
+Metadata columns:
+- ingestion_timestamp = current_timestamp()
+- source_file_name = input_file_name()
+- ingestion_date = current_date()
+
+Partition strategy:
+- Partition by ingestion_date
+
+SILVER LAYER:
+Casts:
+- amount → DOUBLE
+- transaction_timestamp → TIMESTAMP
+- payment_method → STRING
+- transaction_id → STRING
+- customer_id → STRING
+
+Filter conditions:
+- No filtering on status (include ALL transactions)
+- Filter NULL transaction_id
+- Filter negative amounts
+
+Deduplication:
+- Key: transaction_id
+- Keep latest record using transaction_timestamp
+
+Quality checks:
+- Null transaction_id > 0.5% → FAIL pipeline
+- Duplicate rate > 1% → FAIL pipeline
+
+GOLD LAYER:
+Table Name:
+- compliance_daily_summary
+
+Key Columns:
+- transaction_date
+- payment_method
+
+Business Rules:
+
+1. compliance_flag:
+CASE 
+  WHEN amount > 50000 THEN 'requires_review' 
+  ELSE 'normal' 
+END
+
+2. daily_total_amount:
+SUM(amount)
+
+3. requires_review_count:
+COUNT(CASE WHEN amount > 50000 THEN 1 END)
+
+4. total_transactions:
+COUNT(transaction_id)
+
+5. report_generated_at:
+current_timestamp()
+
+Aggregation:
+GROUP BY transaction_date, payment_method
+
+ERROR HANDLING:
+- If source file missing:
+  → Fail pipeline immediately
+  → Log error in pipeline_run_logs
+  → Send alert (email/Slack)
+
+- If schema mismatch:
+  → Fail pipeline
+  → Log missing columns in schema_error_log
+
+- If data quality checks fail:
+  → Stop pipeline
+  → Write invalid records to compliance_error_records
+  → Send alert
+
+- If null/invalid amount:
+  → Move records to compliance_error_records
+  → Exclude from aggregation
+
+PERFORMANCE:
+- Partition Gold table by transaction_date
+- Use predicate pushdown on date for daily runs
+- Use incremental processing (only current day data)
+- Cache Silver layer if reused
+- No joins required → no broadcast needed
