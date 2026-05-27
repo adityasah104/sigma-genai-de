@@ -8,7 +8,7 @@
         "max_value": 30
       },
       "meta": {
-        "notes": "Ensure the row count is within the expected range after Bronze -> Silver transform."
+        "notes": "Ensure the number of rows is within the expected range after the Bronze -> Silver transformation."
       }
     },
     {
@@ -70,7 +70,11 @@
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "status",
-        "value_set": ["COMPLETED", "FAILED", "PENDING"]
+        "value_set": [
+          "COMPLETED",
+          "FAILED",
+          "PENDING"
+        ]
       },
       "meta": {
         "notes": "Status must be one of the allowed values: COMPLETED, FAILED, PENDING."
@@ -80,7 +84,10 @@
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "quality_flag",
-        "value_set": ["CLEAN", "UNMATCHED"]
+        "value_set": [
+          "CLEAN",
+          "UNMATCHED"
+        ]
       },
       "meta": {
         "notes": "Quality flag must be either CLEAN or UNMATCHED."
