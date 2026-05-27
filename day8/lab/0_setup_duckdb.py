@@ -3,7 +3,7 @@ Day 8 — DuckDB Setup Script
 Run this ONCE before any other Day 8 script.
 Creates sigma_platform.duckdb with Bronze / Silver / Gold tables.
 
-Usage: python 0_setup_duckdb.py   (from repo/day8/lab/)
+Usage: python3 0_setup_duckdb.py   (from repo/day8/lab/)
 """
 
 import sys

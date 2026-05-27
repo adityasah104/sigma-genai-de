@@ -36,7 +36,7 @@ WHERE THIS FITS IN THE PLATFORM:
 
 HOW TO RUN:
   cd repo/day8/lab
-  python 5_observability.py
+  python3 5_observability.py
 
 DEPENDENCIES:
   pip install evidently pandas duckdb

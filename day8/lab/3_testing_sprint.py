@@ -35,7 +35,7 @@ WHERE THIS FITS IN THE PLATFORM:
 
 HOW TO RUN:
   cd repo/day8/lab
-  python 3_testing_sprint.py
+  python3 3_testing_sprint.py
 
 OUTPUT:
   devops_brain/test_pipeline.py    <- AI-generated pytest suite

@@ -33,7 +33,7 @@ WHERE THIS FITS IN THE PLATFORM:
 
 HOW TO RUN:
   cd repo/day8/lab
-  python 4_ci_slo.py
+  python3 4_ci_slo.py
 
 OUTPUT:
   devops_brain/pipeline_ci.yml      <- copy this to .github/workflows/
