@@ -8,7 +8,11 @@
         "max_value": 30
       },
       "meta": {
+<<<<<<< HEAD
+        "notes": "Ensure the row count is within the expected range after Bronze -> Silver transform."
+=======
         "notes": "Ensure the number of rows is within the expected range after the Bronze -> Silver transformation."
+>>>>>>> 792b7e2 (Day8 completed)
       }
     },
     {
@@ -70,11 +74,15 @@
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "status",
+<<<<<<< HEAD
+        "value_set": ["COMPLETED", "FAILED", "PENDING"]
+=======
         "value_set": [
           "COMPLETED",
           "FAILED",
           "PENDING"
         ]
+>>>>>>> 792b7e2 (Day8 completed)
       },
       "meta": {
         "notes": "Status must be one of the allowed values: COMPLETED, FAILED, PENDING."
@@ -84,10 +92,14 @@
       "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "quality_flag",
+<<<<<<< HEAD
+        "value_set": ["CLEAN", "UNMATCHED"]
+=======
         "value_set": [
           "CLEAN",
           "UNMATCHED"
         ]
+>>>>>>> 792b7e2 (Day8 completed)
       },
       "meta": {
         "notes": "Quality flag must be either CLEAN or UNMATCHED."
