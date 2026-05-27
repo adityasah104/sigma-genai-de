@@ -1,6 +1,10 @@
 {
   "sprint": "ci_slo",
+<<<<<<< HEAD
   "generated_at": "2026-05-27T15:55:50.769960",
+=======
+  "generated_at": "2026-05-27T16:01:33.325885",
+>>>>>>> 792b7e2 (Day8 completed)
   "models_used": {
     "workflow_generation": "amazon.nova-pro-v1:0",
     "slo_generation": "amazon.nova-pro-v1:0",
@@ -13,10 +17,17 @@
     },
     "slo_definitions": {
       "input": 473,
+<<<<<<< HEAD
       "output": 310
     },
     "alert_rules": {
       "input": 567,
+=======
+      "output": 294
+    },
+    "alert_rules": {
+      "input": 554,
+>>>>>>> 792b7e2 (Day8 completed)
       "output": 727
     }
   },
@@ -33,5 +44,9 @@
     "WARNING": 3,
     "INFO": 2
   },
+<<<<<<< HEAD
   "student_judgment": "yes agree"
+=======
+  "student_judgment": "No, it should be 6 hours so the on-call engineer is paged before the business starts using stale data"
+>>>>>>> 792b7e2 (Day8 completed)
 }
