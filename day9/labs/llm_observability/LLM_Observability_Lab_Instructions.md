@@ -103,7 +103,7 @@ if __name__ == "__main__":
 ### Step 3: Run the Application
 Start your application in the background:
 ```bash
-python app_with_otel.py
+python3 app_with_otel.py
 ```
 *You should see logs indicating Phoenix is listening on `http://localhost:6006` and the support agent response printed in the console.*
 

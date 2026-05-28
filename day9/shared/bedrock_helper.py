@@ -35,3 +35,37 @@ def call_nova_lite(system: str, user: str, max_tokens: int = 1000) -> str:
 
 def call_nova_pro(system: str, user: str, max_tokens: int = 1500) -> str:
     return _invoke("amazon.nova-pro-v1:0", system, user, max_tokens, temperature=0.2)
+
+def _invoke_llama(model_id: str, system: str, user: str, max_tokens: int = 1500, temperature: float = 0.3) -> str:
+    prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"
+    body = {
+        "prompt": prompt,
+        "max_gen_len": max_tokens,
+        "temperature": temperature
+    }
+    response = _get_client().invoke_model(
+        modelId=model_id,
+        body=json.dumps(body),
+    )
+    result = json.loads(response["body"].read())
+    return result["generation"]
+
+def call_llama_critic(system: str, user: str, max_tokens: int = 1000) -> str:
+    return _invoke_llama("meta.llama3-70b-instruct-v1:0", system, user, max_tokens, temperature=0.3)
+
+def _invoke_mistral(model_id: str, system: str, user: str, max_tokens: int = 1500, temperature: float = 0.3) -> str:
+    prompt = f"<s>[INST] {system}\n\n{user} [/INST]"
+    body = {
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature
+    }
+    response = _get_client().invoke_model(
+        modelId=model_id,
+        body=json.dumps(body),
+    )
+    result = json.loads(response["body"].read())
+    return result["outputs"][0]["text"]
+
+def call_mistral_critic(system: str, user: str, max_tokens: int = 1000) -> str:
+    return _invoke_mistral("mistral.mistral-large-2402-v1:0", system, user, max_tokens, temperature=0.3)
