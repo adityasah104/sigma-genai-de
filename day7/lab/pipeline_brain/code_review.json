@@ -4,107 +4,99 @@
       "id": 1,
       "name": "IDEMPOTENCY",
       "status": "PASS",
-      "evidence": "No violation found",
-      "finding": "All writes use 'overwrite' mode.",
-      "fix": "None required"
+      "finding": "All write operations use overwrite mode.",
+      "fix": "None required."
     },
     {
       "id": 2,
       "name": "ERROR_HANDLING",
-      "status": "PASS",
-      "evidence": "All pipeline stages are wrapped in try/except blocks.",
-      "finding": "Proper error handling is implemented.",
-      "fix": "None required"
+      "status": "FAIL",
+      "finding": "No try/except blocks around pipeline stages.",
+      "fix": "Wrap each pipeline stage in try/except blocks."
     },
     {
       "id": 3,
       "name": "PARTITION_PRUNING",
       "status": "PASS",
-      "evidence": "transactions_df = (spark.read.format(\"parquet\")\n                           .load(os.path.join(bronze_path, f\"ingestion_timestamp={run_date}\")))\n\nsilver_df = spark.read.parquet(silver_path).filter(col(\"date\") == run_date)",
-      "finding": "Partition pruning is applied using filters on date columns.",
-      "fix": "None required"
+      "finding": "Read operations are filtered by date/partition column.",
+      "fix": "None required."
     },
     {
       "id": 4,
       "name": "ROW_COUNT_LOGGING",
-      "status": "PASS",
-      "evidence": "logger.info(f\"[Bronze] Ingestion complete | output={output_path}\")\n\nlogger.info(f\"[Silver] Transformation complete | output={output_path}\")\n\nlogger.info(\"[Gold:customer_ltv] Complete\")",
-      "finding": "Logging statements are present after transformations.",
-      "fix": "None required"
+      "status": "WARN",
+      "finding": "No row count logging after transformation stages.",
+      "fix": "Add logging for row counts after each transformation stage."
     },
     {
       "id": 5,
       "name": "BUSINESS_RULES",
       "status": "PASS",
-      "evidence": "merchant_performance_df = silver_df.groupBy(\"merchant_id\", \"merchant_name\", \"category\", \"city\", \"date\") \\\n            .agg(\n                sum(when(col(\"status\") == \"COMPLETED\", col(\"amount\")).otherwise(0)).alias(\"total_revenue\"),\n                count(\"*\").alias(\"txn_count\"),\n                (count(when(col(\"status\") == \"FAILED\", 1)) / count(\"*\") * 100).alias(\"failure_rate_pct\")\n            )",
-      "finding": "Revenue aggregation includes filtering by status='COMPLETED'.",
-      "fix": "None required"
+      "finding": "Revenue is calculated as SUM(amount) WHERE status='COMPLETED'.",
+      "fix": "None required."
     },
     {
       "id": 6,
       "name": "NULL_HANDLING",
-      "status": "PASS",
-      "evidence": "transactions_df = transactions_df.filter((col(\"transaction_id\").isNotNull()) & (col(\"amount\") >= 0))",
-      "finding": "Null handling is implemented using.isNotNull() filter.",
-      "fix": "None required"
+      "status": "WARN",
+      "finding": "No NULL checks on primary key and critical columns.",
+      "fix": "Add NULL checks on primary key and critical columns."
     },
     {
       "id": 7,
       "name": "BROADCAST_HINT",
-      "status": "PASS",
-      "evidence": "enriched_df = (transactions_df.join(broadcast(merchants_df),\n                                             on=col(\"transactions_df.merchant_id\") == col(\"merchants_df.merchant_id\"),\n                                             how=\"left_outer\"))",
-      "finding": "Broadcast hint is used in join operations.",
-      "fix": "None required"
+      "status": "WARN",
+      "finding": "broadcast() is not used on the merchant dimension join.",
+      "fix": "Use broadcast() on the merchant dimension join."
     },
     {
       "id": 8,
       "name": "HARDCODED_PATHS",
-      "status": "PASS",
-      "evidence": "Paths are read from environment variables.",
-      "finding": "No hardcoded paths found.",
-      "fix": "None required"
+      "status": "FAIL",
+      "finding": "File paths are hardcoded as strings.",
+      "fix": "Use parameters instead of hardcoded file paths."
     },
     {
       "id": 9,
       "name": "SCHEMA_VALIDATION",
-      "status": "PASS",
-      "evidence": "No transformations happen without prior schema checks.",
-      "finding": "Schema validation is implicitly handled through casting and filtering.",
-      "fix": "None required"
+      "status": "WARN",
+      "finding": "No schema validation before transforming.",
+      "fix": "Add schema validation to check expected columns."
     },
     {
       "id": 10,
       "name": "DEDUPLICATION",
       "status": "PASS",
-      "evidence": "transactions_df = transactions_df.withColumn(\"row_number\", f.row_number().over(Window.partitionBy(\"transaction_id\").orderBy(col(\"rank\").desc())))\ntransactions_df = transactions_df.filter(col(\"row_number\") == 1).drop(\"rank\", \"row_number\")",
-      "finding": "Deduplication logic is present using window functions.",
-      "fix": "None required"
+      "finding": "Explicit dedup logic on transaction_id is present.",
+      "fix": "None required."
     },
     {
       "id": 11,
       "name": "METADATA_OUTPUT",
       "status": "PASS",
-      "evidence": "run_metadata = {\"run_date\": run_date, \"run_id\": run_id, \"input_path\": input_path, \n                    \"bronze_path\": bronze_path, \"silver_path\": silver_path}\nmetadata_file = os.path.join(metadata_path, f\"run_metadata_{run_date}.json\")\nwith open(metadata_file, \"w\") as f:\n    json.dump(run_metadata, f)",
-      "finding": "Metadata is written to a JSON file.",
-      "fix": "None required"
+      "finding": "Pipeline writes a run summary JSON at the end.",
+      "fix": "None required."
     },
     {
       "id": 12,
       "name": "IMPORTS",
       "status": "PASS",
-      "evidence": "No wildcard imports found.",
-      "finding": "Imports are specific and not using wildcards.",
-      "fix": "None required"
+      "finding": "All imports are present and specific.",
+      "fix": "None required."
     }
   ],
   "summary": {
-    "pass_count": 12,
-    "fail_count": 0,
-    "warn_count": 0,
-    "merge_recommendation": "APPROVE",
-    "top_3_fixes": []
+    "pass_count": 6,
+    "fail_count": 2,
+    "warn_count": 4,
+    "merge_recommendation": "APPROVE_WITH_CHANGES",
+    "top_3_fixes": [
+      "Wrap each pipeline stage in try/except blocks.",
+      "Add logging for row counts after each transformation stage.",
+      "Use parameters instead of hardcoded file paths."
+    ]
   },
-  "reviewed_file": "pipeline_brain/generated_pipeline.py",
-  "reviewed_at": "2026-05-26T12:03:28.759097+00:00",
+  "reviewed_file": "pipeline_brain\\generated_pipeline.py",
+  "reviewed_at": "2026-05-26T11:10:54.020507+00:00",
   "model": "amazon.nova-pro-v1:0"
 }

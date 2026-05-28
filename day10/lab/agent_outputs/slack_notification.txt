@@ -1,0 +1,6 @@
+*SIGMA DATATECH DATA QUALITY ALERT*  
+*Date:*    today  
+*Status:*  CRITICAL  
+*Issues:*  4 total — 3 critical, 1 high  
+*Top fix:* Address NULL values in columns immediately  
+*Next review:* tomorrow's date

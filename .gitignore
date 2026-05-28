@@ -40,3 +40,6 @@ desktop.ini
 .pytest_cache/
 *.log
 node_modules/
+
+.vercel
+.env*
