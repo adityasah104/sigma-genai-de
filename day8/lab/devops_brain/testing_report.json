@@ -1,10 +1,6 @@
 {
   "sprint": "testing_sprint",
-<<<<<<< HEAD
   "generated_at": "2026-05-27T10:22:49.917732+00:00",
-=======
-  "generated_at": "2026-05-27T09:52:33.968511+00:00",
->>>>>>> 792b7e2 (Day8 completed)
   "models_used": {
     "pytest_suite": "amazon.nova-pro-v1:0",
     "ge_suite": "amazon.nova-lite-v1:0"
@@ -12,7 +8,6 @@
   "token_usage": {
     "step1_pytest": {
       "input": 1821,
-<<<<<<< HEAD
       "output": 1028
     },
     "step2_ge": {
@@ -21,31 +16,14 @@
     },
     "total_input": 2407,
     "total_output": 1813
-=======
-      "output": 1305
-    },
-    "step2_ge": {
-      "input": 586,
-      "output": 798
-    },
-    "total_input": 2407,
-    "total_output": 2103
->>>>>>> 792b7e2 (Day8 completed)
   },
   "pytest": {
     "file": "devops_brain/test_pipeline.py",
     "tests_generated": 9,
-<<<<<<< HEAD
     "passed": 9,
     "failed": 0,
     "errors": 0,
     "all_green": true
-=======
-    "passed": 0,
-    "failed": 0,
-    "errors": 2,
-    "all_green": false
->>>>>>> 792b7e2 (Day8 completed)
   },
   "great_expectations": {
     "file": "devops_brain/ge_expectations.json",
@@ -108,9 +86,5 @@
       "total": 10
     }
   },
-<<<<<<< HEAD
   "student_judgment": "test_null_transaction_id_filtered"
-=======
-  "student_judgment": "This is a TEST bug; I would fix it by ensuring sys.path.insert is placed before the import statement"
->>>>>>> 792b7e2 (Day8 completed)
 }
