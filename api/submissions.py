@@ -31,7 +31,8 @@ MASTER_TIER = {
             "devops_brain/observability_report.json",
         ],
     },
-}
+    }
+
 
 EXPECTED_FILES = {
     6: {
@@ -52,6 +53,9 @@ EXPECTED_FILES = {
         "devops_brain/testing_report.json":       "Tests",
         "devops_brain/ci_slo_report.json":        "CI/SLO",
         "devops_brain/observability_report.json": "Observe",
+        "devops_brain/test_pipeline.py": "pytest",
+        "devops_brain/soda_report.json": "Soda",
+        "devops_brain/ship_report.json": "Ship",
     },
 }
 
