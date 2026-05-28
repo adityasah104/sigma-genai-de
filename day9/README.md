@@ -92,7 +92,7 @@ Every module has a pre-seeded problem that breaks a naive solution. You will hit
 
 ```bash
 git add day9/team<N>_<name>/
-git commit -m "Day 9 case study — <module name>"
+git commit -m "Day 9 case study — Test Saboteur"
 git push
 ```
 
