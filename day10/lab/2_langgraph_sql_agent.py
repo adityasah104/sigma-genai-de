@@ -46,7 +46,10 @@ Executor (runs SQL against DuckDB)
     ↓
 Final Answer + Memory saved to SQLite
 
-SNOWFLAKE CONNECTION (1-line swap — show this in class)
+WE USE DUCKDB BUT IF YOU WANT TO USE SNOWFLAKE CONNECTION (Just 1-line swap)
+
+**The Snowflake Swap (The Stretch Assignment for Super Fast Finishers)**
+
 -------------------------------------------------------
 # Replace DuckDB executor with:
 import snowflake.connector
@@ -469,109 +472,20 @@ def student_build_task():
     print("STUDENT BUILD TASK — Build your own LangGraph from scratch")
     print("═"*70)
     print("""
-You are building a 2-node SQL safety graph.
+Open the file:  2b_student_build.py
 
-STEP 1 — Define CheckerState (TypedDict with 4 fields)
-STEP 2 — Write sql_checker_node   (no LLM — just check for WHERE in the string)
-STEP 3 — Write safe_executor_node (run SQL via DuckDB if safe, block if not)
-STEP 4 — Write route_by_safety    (returns "execute" or "blocked")
-STEP 5 — Wire the graph           (StateGraph → add_node → set_entry_point →
-                                   add_conditional_edges → add_edge → compile)
-STEP 6 — Test with 2 queries      (one safe, one unsafe)
+It contains a skeleton with 4 functions that have  pass  where your code goes.
+Fill in every pass, then run:
 
-Read the skeleton below. Replace every  pass / raise  with real code.
-Then uncomment STEP 6 to verify.
+    python 2b_student_build.py
+
+Both test cases must pass:
+  ✅ SAFE SQL   → returns actual data rows from DuckDB
+  ❌ UNSAFE SQL → returns "BLOCKED: ..."
+
+Show the trainer the output before moving to Lab 3.
 """)
 
-    # ── STEP 1: State ──────────────────────────────────────────────────────────
-    # TypedDict is how LangGraph passes data between nodes.
-    # Every field here is readable and writable by every node.
-    # Add your 4 fields: sql (str), is_safe (bool), check_reason (str), result (str)
-
-    # from typing import TypedDict   ← already imported at top of file
-    # class CheckerState(TypedDict):
-    #     sql          : str     # the SQL query to check
-    #     is_safe      : bool    # True if WHERE clause present
-    #     check_reason : str     # one sentence: why safe or unsafe
-    #     result       : str     # query result or blocked message
-
-    # ── STEP 2: sql_checker_node ──────────────────────────────────────────────
-    # Rules:
-    #  ▸ Check if "WHERE" appears in state["sql"] (case-insensitive)
-    #  ▸ If yes:  is_safe=True,  check_reason="SQL has a WHERE clause — safe to run"
-    #  ▸ If no:   is_safe=False, check_reason="No WHERE clause — full table scan blocked"
-    #  ▸ Return a dict (only the fields you are changing)
-
-    # def sql_checker_node(state: CheckerState) -> dict:
-    #     pass  # ← YOUR CODE HERE (~4 lines)
-
-    # ── STEP 3: safe_executor_node ────────────────────────────────────────────
-    # Rules:
-    #  ▸ If state["is_safe"]:
-    #       run state["sql"] against DuckDB (use tool_query_db defined above)
-    #       return {"result": <query output string>}
-    #  ▸ If not state["is_safe"]:
-    #       return {"result": "BLOCKED: " + state["check_reason"]}
-
-    # def safe_executor_node(state: CheckerState) -> dict:
-    #     pass  # ← YOUR CODE HERE (~6 lines)
-
-    # ── STEP 4: Routing function ──────────────────────────────────────────────
-    # Returns the NAME of the next node as a string.
-    # LangGraph uses this return value to decide which edge to follow.
-
-    # def route_by_safety(state: CheckerState) -> str:
-    #     pass  # ← YOUR CODE HERE (1 line — return "execute" or "blocked")
-
-    # ── STEP 5: Wire the graph ────────────────────────────────────────────────
-    # Pattern is identical to the big graph above — just smaller.
-    # Compare your code here to build_graph() above when you are done.
-
-    # from langgraph.graph import StateGraph, END  ← already imported
-    #
-    # def build_checker_graph():
-    #     g = StateGraph(CheckerState)
-    #     g.add_node("check",   sql_checker_node)
-    #     g.add_node("execute", safe_executor_node)
-    #     g.add_node("blocked", safe_executor_node)   # same function, two named nodes
-    #     g.set_entry_point("check")
-    #     g.add_conditional_edges(
-    #         "check",
-    #         route_by_safety,
-    #         {"execute": "execute", "blocked": "blocked"}
-    #     )
-    #     g.add_edge("execute", END)
-    #     g.add_edge("blocked", END)
-    #     return g.compile()
-
-    # ── STEP 6: Test — uncomment when Steps 1–5 are done ─────────────────────
-    # checker_app = build_checker_graph()
-    # db_schema   = memory.get_schema()   # memory is defined at module level above
-    #
-    # safe_sql   = "SELECT merchant_id, COUNT(*) AS txn_count FROM silver_transactions WHERE amount > 100 GROUP BY 1 ORDER BY 2 DESC LIMIT 5"
-    # unsafe_sql = "SELECT * FROM silver_transactions"
-    #
-    # for label, sql in [("✅ SAFE", safe_sql), ("❌ UNSAFE", unsafe_sql)]:
-    #     print(f"\n── Test: {label} ──────────────────────────────────────────")
-    #     init = {"sql": sql, "is_safe": False, "check_reason": "", "result": ""}
-    #     final = checker_app.invoke(init)
-    #     print(f"  is_safe      : {final['is_safe']}")
-    #     print(f"  check_reason : {final['check_reason']}")
-    #     print(f"  result       : {final['result'][:120]}")
-    #
-    # print("\n" + "─"*60)
-    # print("DEBRIEF QUESTIONS — answer both before Lab 3:")
-    # print("─"*60)
-    # try:
-    #     q1 = input("1. You used add_conditional_edges. What does the dict argument do? ").strip()
-    #     q2 = input("2. Why did we use TWO named nodes for one function (execute / blocked)? ").strip()
-    # except EOFError:
-    #     q1 = q2 = "NOT ANSWERED"
-    # print(f"\nYour answers logged. Show the trainer both test outputs + your answers.")
-    # ─────────────────────────────────────────────────────────────────────────
-
-    print("Build the graph (Steps 1–5), then uncomment Step 6 and run both tests.")
-    print("When both SAFE and UNSAFE tests pass → you understand LangGraph.")
     print("The 3 concepts: TypedDict state + node functions + conditional edges.")
     print("That is the entire framework. Everything else is just more of these 3.")
 
