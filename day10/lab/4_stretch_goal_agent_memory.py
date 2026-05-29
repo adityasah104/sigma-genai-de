@@ -35,13 +35,15 @@ The agent will tell you how many it found. If your count differs, that is the le
 
     conn = duckdb.connect("sigma_platform.duckdb")
     df = conn.execute("SELECT * FROM silver_transactions WHERE amount > 0").fetchdf()
-    total = df["amounts"].sum()           # Bug 1 ?
-    df2 = df.groupby("merchant_id").agg({"amount": "mean"})
-    conn.execute(f"CREATE TABLE report AS SELECT * FROM df2")  # Bug 2 ?
+    total = df["amounts"].sum()                                    # Bug 1 ?
+    df2 = df.groupby("merchant_id").agg({"amount": "mean"}).reset_index()
+    df2.columns = ["merchant_id", "avg_amount"]
+    df2_sorted = df2.sort_values("avg_amounts", ascending=False)   # Bug 2 ?
     conn.close()
-    print(f"Done. Total: {total}, Merchants: {len(df2)}")
-    conn.execute("DROP TABLE report")     # Bug 3 ?
-    top = df2.iloc[0]["merchant"]         # Bug 4 ?  (this one is subtle)
+    print(f"Done. Total: {total:.2f}, Merchants: {len(df2)}")
+    total_check = conn.execute("SELECT COUNT(*) FROM silver_transactions").fetchone()[0]  # Bug 3 ?
+    print(f"Verified count: {total_check}")
+    top = df2_sorted.iloc[0]["merchant"]                           # Bug 4 ?  (subtle)
 
 ==============================================================================
 OUTPUT
@@ -114,9 +116,19 @@ class HealingMemory:
         self.conn.commit()
 
     def _fingerprint(self, error: str) -> str:
-        """Generate a short hash of the error type + first relevant line."""
+        """Stable fingerprint: exception message + the code line that caused it.
+        Ignores file paths and line numbers — both change across runs."""
         lines = [l.strip() for l in error.splitlines() if l.strip()]
-        key = " ".join(lines[-3:]) if len(lines) >= 3 else error
+        # Last line = exception type + message e.g. "KeyError: 'amounts'"
+        exception_line = lines[-1] if lines else error
+        # Find the actual code line (not File/path lines, not ^^^ markers)
+        code_lines = [l for l in lines
+                      if not l.startswith("File ")
+                      and not l.startswith("~")
+                      and not l.startswith("^")
+                      and not l.startswith("Traceback")]
+        code_context = code_lines[-2] if len(code_lines) >= 2 else ""
+        key = f"{exception_line} | {code_context}"
         return hashlib.md5(key.encode()).hexdigest()[:12]
 
     def lookup(self, error: str) -> dict | None:
@@ -153,35 +165,36 @@ class HealingMemory:
 BROKEN_PIPELINE = '''\
 import duckdb, os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "sigma_platform.duckdb")
+DB_PATH = r"<<<DB_PATH>>>"  # injected at runtime — safe across temp file execution
 
 def run_merchant_report():
-    conn = duckdb.connect(DB_PATH, read_only=True)
+    conn = duckdb.connect(DB_PATH)
     df = conn.execute("SELECT * FROM silver_transactions WHERE amount > 0").fetchdf()
 
-    # Bug 1: wrong column name ("amounts" instead of "amount")
+    # Bug 1: wrong column name — "amounts" does not exist, should be "amount"
     total = df["amounts"].sum()
 
     df2 = df.groupby("merchant_id").agg({"amount": "mean"}).reset_index()
     df2.columns = ["merchant_id", "avg_amount"]
 
-    # Bug 2: can't use Python variable in DuckDB CREATE TABLE (read-only conn too)
-    conn.execute(f"CREATE TABLE report AS SELECT * FROM df2")
+    # Bug 2: typo in column name — "avg_amounts" does not exist, should be "avg_amount"
+    df2_sorted = df2.sort_values("avg_amounts", ascending=False)
 
     conn.close()
     print(f"Done. Total: {total:.2f}, Merchants: {len(df2)}")
 
-    # Bug 3: conn already closed — this will fail
-    conn.execute("DROP TABLE report")
+    # Bug 3: conn already closed — cannot execute after close()
+    total_check = conn.execute("SELECT COUNT(*) FROM silver_transactions").fetchone()[0]
+    print(f"Verified count: {total_check}")
 
     # Bug 4 (subtle — only surfaces after 1-3 are fixed):
-    # df2 has columns ["merchant_id", "avg_amount"] but this uses "merchant"
-    top = df2.iloc[0]["merchant"]
+    # df2_sorted has columns ["merchant_id", "avg_amount"] but "merchant" does not exist
+    top = df2_sorted.iloc[0]["merchant"]
     print(f"Top merchant by avg amount: {top}")
 
 if __name__ == "__main__":
     run_merchant_report()
-'''
+'''.replace("<<<DB_PATH>>>", DB_PATH)
 
 # ── Safe code runner (sandboxed exec with timeout) ────────────────────────────
 def safe_run(code: str, timeout_seconds: int = 15) -> tuple[bool, str]:
@@ -222,7 +235,9 @@ Your job:
 1. Identify ALL bugs (not just the one causing the current error — fix them all)
 2. Return ONLY the corrected Python code — no explanation, no markdown fences
 3. The code must be self-contained and runnable as a standalone script
-4. Preserve the original logic — only fix bugs, do not rewrite the approach
+4. Fix bugs using the simplest correct approach — remove unnecessary code if needed
+5. If a DuckDB connection is read_only=True, do NOT attempt any write operations (CREATE, INSERT, DROP)
+   — either remove the write block or open a separate writable connection
 
 If you have seen a similar fix pattern before, apply it directly.
 Return ONLY valid Python code starting with 'import' or '#'. No prose."""
@@ -287,6 +302,9 @@ def heal(pipeline_code: str, memory: HealingMemory) -> dict:
             icon = "✅" if h["success"] else "❌"
             print(f"  {icon} {h['at'][:16]} — {h['error']}")
 
+    last_failed_error = ""   # full error string from the previous failed attempt
+    last_failed_code  = ""   # code that produced that error
+
     for attempt in range(1, MAX_HEAL_ATTEMPTS + 1):
         print(f"\n{'─'*60}")
         print(f"ATTEMPT {attempt}/{MAX_HEAL_ATTEMPTS} — Running pipeline...")
@@ -301,11 +319,11 @@ def heal(pipeline_code: str, memory: HealingMemory) -> dict:
                 "status": "success",
                 "output": output,
             })
-            # Save successful code to memory
+            # Save successful fix — keyed on the FULL error from the previous failed run
             if attempt > 1:
                 memory.save(
-                    error=healing_log[-2].get("error", ""),
-                    broken_code=healing_log[-2].get("code_tried", ""),
+                    error=last_failed_error,
+                    broken_code=last_failed_code,
                     fixed_code=current_code,
                     rationale=healing_log[-2].get("rationale", ""),
                     success=True,
@@ -314,6 +332,10 @@ def heal(pipeline_code: str, memory: HealingMemory) -> dict:
 
         # ── Pipeline failed ───────────────────────────────────────────────────
         print(f"❌ Failed. Error:\n   {output[:300]}")
+
+        # Track full error for the success-save fingerprint (must not be truncated)
+        last_failed_error = output
+        last_failed_code  = current_code
 
         # Check memory for a known fix
         cached = memory.lookup(output)
@@ -482,60 +504,81 @@ THE KEY HYPOTHESIS TO TEST:
     #   → add a wrong filter BEFORE the groupby that silently drops rows
     #   → the groupby still runs, the output looks fine, but totals are wrong
 
-    BROKEN_PIPELINE_V2 = None  # ← replace with your triple-quoted pipeline string
+    BROKEN_PIPELINE_V2 = f'''\                                                                                                                      
+    import duckdb, os                                                                                                                                   
+                                                                                                                                                        
+    DB_PATH = r"{DB_PATH}"                                                                                                                              
+                                                                                                                                                        
+    def run_flawed_report():                                                                                                                            
+        conn = duckdb.connect(DB_PATH, read_only=True)                                                                                                  
+                                                                                                                                                        
+        # SILENT LOGIC BUG: We want to calculate Total Successful Revenue.                                                                              
+        # But we forgot to filter `WHERE status = 'COMPLETED'`!                                                                                         
+        # This includes Refunds and Failures. It won't crash, but the data is completely wrong!                                                         
+        df = conn.execute("SELECT * FROM silver_transactions").fetchdf()                                                                                
+                                                                                                                                                        
+        # PYTHON BUG 1: The column is called 'amount', not 'revenue' (Throws KeyError)                                                                  
+        total_revenue = df["revenue"].sum()                                                                                                             
+                                                                                                                                                        
+        # PYTHON BUG 2: You cannot concatenate a float to a string like this (Throws TypeError)                                                         
+        print("Total Successful Revenue: " + total_revenue)                                                                                             
+                                                                                                                                                        
+    if __name__ == "__main__":                                                                                                                          
+        run_flawed_report()                                                                                                                             
+    '''  # ← replace with your triple-quoted pipeline string
 
     # ── STEP 2: Run the healer ────────────────────────────────────────────────
     # Uncomment when Step 1 is done:
 
-    # if BROKEN_PIPELINE_V2 is None:
-    #     print("❌ BROKEN_PIPELINE_V2 is None — complete Step 1 first.")
-    #     return
+    if BROKEN_PIPELINE_V2 is None:
+        print("❌ BROKEN_PIPELINE_V2 is None — complete Step 1 first.")
+        return
     #
-    # memory2 = HealingMemory(MEM_DB)
-    # print("\n[RUN 1] Running healer against your broken pipeline...")
-    # result2 = heal(BROKEN_PIPELINE_V2, memory2)
-    # memory2.close()
-    #
-    # log2_path = os.path.join(OUTPUT_DIR, "healing_log_v2.json")
-    # with open(log2_path, "w", encoding="utf-8") as f:
-    #     json.dump(result2, f, indent=2, ensure_ascii=False)
-    # print(f"\n[SAVED] {log2_path}")
-    # ai_calls = len([e for e in result2["healing_log"] if not e.get("from_memory")])
-    # print(f"Status: {result2['final_status']}  |  Attempts: {result2['total_attempts']}  |  LLM calls: {ai_calls}")
+    memory2 = HealingMemory(MEM_DB)
+    print("\n[RUN 1] Running healer against your broken pipeline...")
+    result2 = heal(BROKEN_PIPELINE_V2, memory2)
+    memory2.close()
+    
+    log2_path = os.path.join(OUTPUT_DIR, "healing_log_v2.json")
+    with open(log2_path, "w", encoding="utf-8") as f:
+        json.dump(result2, f, indent=2, ensure_ascii=False)
+    print(f"\n[SAVED] {log2_path}")
+    ai_calls = len([e for e in result2["healing_log"] if not e.get("from_memory")])
+    print(f"Status: {result2['final_status']}  |  Attempts: {result2['total_attempts']}  |  LLM calls: {ai_calls}")
 
     # ── STEP 3: Inspect the memory cache ──────────────────────────────────────
     # Run this after Step 2 to see what the healer cached:
 
-    # import sqlite3
-    # mem_conn = sqlite3.connect(MEM_DB)
-    # rows = mem_conn.execute(
-    #     "SELECT error_fingerprint, substr(error_message,1,60) AS err, success, created_at "
-    #     "FROM healing_history ORDER BY id DESC LIMIT 8"
-    # ).fetchall()
-    # print("\n── agent_memory.db contents (latest 8 rows) ────────────────────")
-    # for fp, err, ok, ts in rows:
-    #     print(f"  {'✅' if ok else '❌'}  {ts[:16]}  fp={fp}  {err}...")
-    # mem_conn.close()
+    import sqlite3
+    mem_conn = sqlite3.connect(MEM_DB)
+    rows = mem_conn.execute(
+        "SELECT error_fingerprint, substr(error_message,1,60) AS err, success, created_at "
+        "FROM healing_history ORDER BY id DESC LIMIT 8"
+    ).fetchall()
+    print("\n── agent_memory.db contents (latest 8 rows) ────────────────────")
+    for fp, err, ok, ts in rows:
+        print(f"  {'✅' if ok else '❌'}  {ts[:16]}  fp={fp}  {err}...")
+    mem_conn.close()
 
     # ── STEP 4: Second run — observe cache hit behaviour ─────────────────────
     # Uncomment after Step 2:
 
-    # memory3 = HealingMemory(MEM_DB)
-    # print("\n[RUN 2] Running healer again with the SAME broken pipeline...")
-    # result3 = heal(BROKEN_PIPELINE_V2, memory3)
-    # memory3.close()
-    # ai_calls_2 = len([e for e in result3["healing_log"] if not e.get("from_memory")])
-    # cached_2   = len([e for e in result3["healing_log"] if e.get("from_memory")])
-    # print(f"\nRun 2:  LLM calls = {ai_calls_2}  |  From cache = {cached_2}")
-    # print("If cache > 0: the memory system worked. Same error, zero LLM cost.")
+    memory3 = HealingMemory(MEM_DB)
+    print("\n[RUN 2] Running healer again with the SAME broken pipeline...")
+    result3 = heal(BROKEN_PIPELINE_V2, memory3)
+    memory3.close()
+    ai_calls_2 = len([e for e in result3["healing_log"] if not e.get("from_memory")])
+    cached_2   = len([e for e in result3["healing_log"] if e.get("from_memory")])
+    print(f"\nRun 2:  LLM calls = {ai_calls_2}  |  From cache = {cached_2}")
+    print("If cache > 0: the memory system worked. Same error, zero LLM cost.")
 
     # ── STEP 5: Reflection ────────────────────────────────────────────────────
-    # try:
-    #     q1 = input("\n1. Which of your bugs did the agent miss, and why? ").strip()
-    #     q2 = input("2. In production, how would you catch the logic bug the agent missed? ").strip()
-    # except EOFError:
-    #     q1 = q2 = "NOT ANSWERED"
-    # print(f"\nLogged. Show healing_log_v2.json + your answers to the trainer.")
+    try:
+        q1 = input("\n1. Which of your bugs did the agent miss, and why? ").strip()
+        q2 = input("2. In production, how would you catch the logic bug the agent missed? ").strip()
+    except EOFError:
+        q1 = q2 = "NOT ANSWERED"
+    print(f"\nLogged. Show healing_log_v2.json + your answers to the trainer.")
 
     print("\nComplete Steps 1–5. The key finding: tracebacks = fixable. Silent wrong data = not.")
     print("That distinction defines where you MUST keep humans in the loop.")
