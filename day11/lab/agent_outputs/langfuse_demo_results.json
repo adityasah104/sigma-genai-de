@@ -1,0 +1,63 @@
+{
+  "run_id": "183859",
+  "results": [
+    {
+      "id": "TXN100441",
+      "merchant": "QuickMart",
+      "amount": 4521.5,
+      "decision": "PASS",
+      "expected": "PASS",
+      "correct": true,
+      "reason": "All fields are valid and the amount is reasonable for a standard retail transaction.",
+      "latency_ms": 1140,
+      "tokens": 228
+    },
+    {
+      "id": "TXN100467",
+      "merchant": "FuelPlus",
+      "amount": -892.0,
+      "decision": "QUARANTINE",
+      "expected": "QUARANTINE",
+      "correct": true,
+      "reason": "Negative amount and future date",
+      "latency_ms": 629,
+      "tokens": 224
+    },
+    {
+      "id": "TXN100489",
+      "merchant": "Apollo Hospital",
+      "amount": 980000.0,
+      "decision": "PASS",
+      "expected": "PASS",
+      "correct": true,
+      "reason": "All fields are valid, amount is reasonable for the merchant type, and there is a business context provided.",
+      "latency_ms": 754,
+      "tokens": 240
+    },
+    {
+      "id": "TXN100512",
+      "merchant": "CloudStore",
+      "amount": 15230.0,
+      "decision": "QUARANTINE",
+      "expected": "QUARANTINE",
+      "correct": true,
+      "reason": "Unknown currency code",
+      "latency_ms": 576,
+      "tokens": 221
+    },
+    {
+      "id": "TXN100534",
+      "merchant": "CafeBlend",
+      "amount": 340.0,
+      "decision": "QUARANTINE",
+      "expected": "QUARANTINE",
+      "correct": true,
+      "reason": "Future date \u2014 cannot be a real transaction",
+      "latency_ms": 620,
+      "tokens": 228
+    }
+  ],
+  "correct": 5,
+  "total": 5,
+  "student_judgment": "I added the business context from the transaction notes so the LLM understands why the amount is large"
+}
