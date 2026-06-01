@@ -54,15 +54,15 @@ STEP 3 — Set environment variables (run in your terminal BEFORE running this s
     (no quotes, no spaces around the = sign)
 
   Mac/Linux terminal:
-    export LANGFUSE_PUBLIC_KEY="pk-lf-"
-    export LANGFUSE_SECRET_KEY="sk-lf-"
+    export LANGFUSE_PUBLIC_KEY="pk-lf-xxxx"
+    export LANGFUSE_SECRET_KEY="sk-lf-xxxx"
     export LANGFUSE_HOST="https://cloud.langfuse.com"
 
 STEP 4 — Install the library:
   pip install langfuse
 
 RUN:
-  python3 5_langfuse_trace_demo.py
+  python 5_langfuse_trace_demo.py
 
 VERIFY:
   After running, go to https://cloud.langfuse.com → your project → Traces
@@ -173,7 +173,6 @@ Transaction:
   merchant: {txn['merchant']}
   amount:   {txn['amount']} {txn['currency']}
   date:     {txn['date']}
-  business_context: {txn.get('note', '')}
 
 Rules:
   - QUARANTINE if: negative amount, unknown currency, future date, null id
