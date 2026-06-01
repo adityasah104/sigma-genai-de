@@ -1,0 +1,160 @@
+{
+  "pattern": "sequential_pipeline",
+  "timestamp": "2026-06-01T12:00:29.670207",
+  "input_file": {
+    "filename": "transactions_raw.csv",
+    "row_count": 500,
+    "columns": [
+      "transaction_id",
+      "merchant_name",
+      "category",
+      "amount",
+      "currency",
+      "transaction_date",
+      "status",
+      "customer_id",
+      "payment_method",
+      "merchant_city"
+    ],
+    "sample_issues": [
+      "4 blank transaction_ids",
+      "7 null amounts",
+      "3 negative amounts",
+      "2 invalid dates",
+      "1 unknown currency"
+    ]
+  },
+  "stages": [
+    {
+      "completeness_percentage": 95.6,
+      "key_issues": [
+        "4 blank transaction_ids",
+        "7 null amounts",
+        "3 negative amounts",
+        "2 invalid dates",
+        "1 unknown currency"
+      ],
+      "recommended_next_action": "Perform data cleaning to handle blank transaction_ids, null and negative amounts, invalid dates, and unknown currency. Validate and correct the data before passing it to the next stage.",
+      "pass_to_next": {
+        "filename": "transactions_raw.csv",
+        "row_count": 500,
+        "columns": [
+          "transaction_id",
+          "merchant_name",
+          "category",
+          "amount",
+          "currency",
+          "transaction_date",
+          "status",
+          "customer_id",
+          "payment_method",
+          "merchant_city"
+        ],
+        "sample_issues": [
+          "4 blank transaction_ids",
+          "7 null amounts",
+          "3 negative amounts",
+          "2 invalid dates",
+          "1 unknown currency"
+        ]
+      },
+      "_stage": "Profile",
+      "_agent": "Profiler Agent",
+      "_timestamp": "2026-06-01T12:00:26.010249"
+    },
+    {
+      "quality_rules": [
+        {
+          "rule": "No blank transaction_ids",
+          "description": "Ensure all transactions have a valid transaction_id.",
+          "classification": "block-load",
+          "auto_fixable": false
+        },
+        {
+          "rule": "No negative amounts",
+          "description": "Transaction amounts should not be negative.",
+          "classification": "quarantine",
+          "auto_fixable": false
+        },
+        {
+          "rule": "Valid dates",
+          "description": "All transaction dates should be valid dates.",
+          "classification": "quarantine",
+          "auto_fixable": false
+        }
+      ],
+      "pass_to_next": {
+        "filename": "transactions_raw.csv",
+        "row_count": 500,
+        "columns": [
+          "transaction_id",
+          "merchant_name",
+          "category",
+          "amount",
+          "currency",
+          "transaction_date",
+          "status",
+          "customer_id",
+          "payment_method",
+          "merchant_city"
+        ],
+        "sample_issues": [
+          "4 blank transaction_ids",
+          "7 null amounts",
+          "3 negative amounts",
+          "2 invalid dates",
+          "1 unknown currency"
+        ],
+        "enriched_context": {
+          "blank_transaction_ids": 4,
+          "null_amounts": 7,
+          "negative_amounts": 3,
+          "invalid_dates": 2,
+          "unknown_currency": 1
+        }
+      },
+      "_stage": "Validate",
+      "_agent": "Quality Agent",
+      "_timestamp": "2026-06-01T12:00:27.930561"
+    },
+    {
+      "load_decision": "quarantined_partial",
+      "justification": "The file has several quality issues, but none of them are critical enough to reject the entire file.",
+      "findings": {
+        "blank_transaction_ids": 4,
+        "null_amounts": 7,
+        "negative_amounts": 3,
+        "invalid_dates": 2,
+        "unknown_currency": 1
+      },
+      "pass_to_next": {
+        "filename": "transactions_raw.csv",
+        "row_count": 500,
+        "columns": [
+          "transaction_id",
+          "merchant_name",
+          "category",
+          "amount",
+          "currency",
+          "transaction_date",
+          "status",
+          "customer_id",
+          "payment_method",
+          "merchant_city"
+        ],
+        "enriched_context": {
+          "blank_transaction_ids": 4,
+          "null_amounts": 7,
+          "negative_amounts": 3,
+          "invalid_dates": 2,
+          "unknown_currency": 1
+        }
+      },
+      "_stage": "LoadDecision",
+      "_agent": "Loader Agent",
+      "_timestamp": "2026-06-01T12:00:29.669560"
+    }
+  ],
+  "final_decision": "quarantined_partial",
+  "student_judgment": "if the file fails quality checks later, the PII scan was done for no use"
+}
