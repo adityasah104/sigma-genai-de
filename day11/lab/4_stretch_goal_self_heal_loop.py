@@ -185,10 +185,20 @@ def apply_fix(failure: dict, diagnosis: dict) -> dict:
             before = len(df)
             df = df[df[error_col].notna() & (df[error_col].astype(str).str.strip() != "")]
             after = len(df)
+            rows_dropped = before - after
+            
+            drop_pct = (rows_dropped / before) * 100
+            if drop_pct > 5:
+                return {
+                    "status": "escalated",
+                    "action": action,
+                    "message": f"Unsafe fix: dropping {drop_pct:.1f}% of rows exceeds the 5% safety threshold. Escalating."
+                }
+                
             fixed_path = os.path.join(OUTPUT_DIR, f"fixed_{failure['dataset']}")
             df.to_csv(fixed_path, index=False)
             return {"status": "fixed", "action": action,
-                    "rows_dropped": before - after, "output_file": fixed_path}
+                    "rows_dropped": rows_dropped, "output_file": fixed_path}
         except Exception as e:
             return {"status": "fix_failed", "error": str(e)}
 
@@ -206,12 +216,50 @@ def apply_fix(failure: dict, diagnosis: dict) -> dict:
             return {"status": "fix_failed", "error": str(e)}
 
     elif action == "cast_column_type":
-        # TODO: Students implement this
-        # Hint: The error says '' (empty string) in amount column
-        # Fix: cast to numeric, coerce errors to NaN, then fill NaN with 0 or median
-        return {"status": "not_implemented",
+        try:
+            df = pd.read_csv(file_path)
+
+            error_col = "amount"  # ideally parse from error_message
+
+            before_invalid = df[error_col].isna().sum() + \
+                (df[error_col].astype(str).str.strip() == "").sum()
+
+            # Convert to numeric
+            numeric_series = pd.to_numeric(df[error_col], errors="coerce")
+
+            # Count how many got corrupted
+            invalid_after_cast = numeric_series.isna().sum()
+
+            total_rows = len(df)
+            corruption_pct = invalid_after_cast / total_rows * 100
+
+            # 🚨 Guardrail
+            if corruption_pct > 10:
+                return {
+                    "status": "escalated",
+                    "action": action,
+                    "message": f"Too many invalid values ({corruption_pct:.2f}%) — unsafe to auto-fix"
+                }
+
+            # Safer fill (median instead of 0)
+            median_val = numeric_series.median()
+            df[error_col] = numeric_series.fillna(median_val)
+
+            fixed_path = os.path.join(OUTPUT_DIR, f"fixed_{failure['dataset']}")
+            df.to_csv(fixed_path, index=False)
+
+            return {
+                "status": "fixed",
                 "action": action,
-                "message": "TODO: Implement cast_column_type fix (see docstring above)"}
+                "column": error_col,
+                "rows_fixed": int(invalid_after_cast),
+                "corruption_pct": round(corruption_pct, 2),
+                "fill_value": float(median_val),
+                "output_file": fixed_path
+            }
+
+        except Exception as e:
+            return {"status": "fix_failed", "error": str(e)}
 
     elif action == "escalate_to_human":
         return {"status": "escalated",
