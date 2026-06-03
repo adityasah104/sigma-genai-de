@@ -1,35 +1,7 @@
-"""
-Sigma Command Center — Business Incident Dashboard
-Reads directly from your team's S3 bucket (Phase 3 output).
-
-Prerequisites:
-  - lab/.env must have SIGMA_S3_BUCKET and AWS credentials set
-  - Phase 3 must have completed (incident report and quarantine file in S3)
-
-Run:  streamlit run app.py
-"""
-
-import io, json, os, re
+import time
 from datetime import datetime
-from pathlib import Path
-
-import boto3
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).parent / "lab" / ".env")
-
-# ── Config ────────────────────────────────────────────────────────────────────
-BUCKET = os.getenv("SIGMA_S3_BUCKET", "")
-REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-
-SEVERITY_COLOR = {
-    "critical": "🔴",
-    "warning":  "🟡",
-    "info":     "🔵",
-    "success":  "🟢",
-}
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -153,153 +125,128 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Guard: bucket must be set ─────────────────────────────────────────────────
-if not BUCKET:
-    st.error("SIGMA_S3_BUCKET is not set. Check lab/.env")
-    st.stop()
 
-# ── Data loading ──────────────────────────────────────────────────────────────
+# ── State Management ──────────────────────────────────────────────────────────
+if "app_state" not in st.session_state:
+    st.session_state.app_state = "NORMAL"
 
-@st.cache_data(ttl=30)
-def load_data() -> dict:
-    s3  = boto3.client("s3", region_name=REGION)
-    cw  = boto3.client("cloudwatch", region_name=REGION)
+def set_disaster():
+    st.session_state.app_state = "DISASTER"
 
-    # ── Snowflake Total Records ───────────────────────────────────────────────
-    total_loaded = "—"
-    try:
-        import snowflake.connector
-        conn = snowflake.connector.connect(
-            account=os.getenv("SNOWFLAKE_ACCOUNT"),
-            user=os.getenv("SNOWFLAKE_USER"),
-            password=os.getenv("SNOWFLAKE_PASSWORD"),
-            database=os.getenv("SNOWFLAKE_DATABASE", "SIGMA"),
-            schema=os.getenv("SNOWFLAKE_SCHEMA", "SILVER"),
-            warehouse=os.getenv("SNOWFLAKE_WAREHOUSE", "SIGMA_WH"),
-            role="ACCOUNTADMIN",
-        )
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM SIGMA.SILVER.TRANSACTIONS")
-        total_loaded = f"{cur.fetchone()[0]:,}"
-        conn.close()
-    except Exception as e:
-        st.warning(f"Could not connect to Snowflake: {e}")
+def set_recovery():
+    st.session_state.app_state = "RECOVERY"
 
-    # ── Incident report ───────────────────────────────────────────────────────
-    report_md   = ""
-    report_key  = ""
-    try:
-        resp    = s3.list_objects_v2(Bucket=BUCKET, Prefix="reports/")
-        objects = resp.get("Contents", [])
-        if objects:
-            latest     = sorted(objects, key=lambda x: x["LastModified"], reverse=True)[0]
-            report_key = latest["Key"]
-            report_md  = s3.get_object(Bucket=BUCKET, Key=report_key)["Body"].read().decode()
-    except Exception as e:
-        st.warning(f"Could not read incident report from S3: {e}")
-
-    # ── Quarantine CSV ────────────────────────────────────────────────────────
-    quarantine_df = pd.DataFrame()
-    try:
-        resp    = s3.list_objects_v2(Bucket=BUCKET, Prefix="quarantine/")
-        objects = resp.get("Contents", [])
-        if objects:
-            latest  = sorted(objects, key=lambda x: x["LastModified"], reverse=True)[0]
-            csv_raw = s3.get_object(Bucket=BUCKET, Key=latest["Key"])["Body"].read().decode()
-            quarantine_df = pd.read_csv(io.StringIO(csv_raw))
-    except Exception as e:
-        st.warning(f"Could not read quarantine file from S3: {e}")
-
-    # ── CloudWatch alarm states ───────────────────────────────────────────────
-    alarms = []
-    try:
-        alarm_names = [
-            "sigma-snowflake-zero-load",
-            "sigma-lambda-version-change",
-            "sigma-pipeline-row-divergence",
-        ]
-        resp   = cw.describe_alarms(AlarmNames=alarm_names)
-        alarms = [
-            {
-                "name":    a["AlarmName"],
-                "trigger": a.get("AlarmDescription", "—"),
-                "state":   a["StateValue"],
-            }
-            for a in resp.get("MetricAlarms", [])
-        ]
-    except Exception as e:
-        st.warning(f"Could not read CloudWatch alarms: {e}")
-
-    # ── Parse incident report for key numbers ─────────────────────────────────
-    def extract(pattern, default="—"):
-        m = re.search(pattern, report_md, re.IGNORECASE | re.DOTALL)
-        return m.group(1).strip() if m else default
-
-    records_lost    = extract(r"Records (?:lost|missing)[:\s]+([\d,]+)")
-    recovered       = extract(r"records? (?:restored|loaded|recovered)[:\s]+([\d,]+)")
-    root_cause      = extract(r"## Root Cause\n+(.*?)\n+##")
-    fix_applied     = extract(r"## Fix Applied\n+(.*?)\n+##")
-    report_time     = report_key.split("_")[-1].replace(".md", "") if report_key else "—"
-
-    return {
-        "report_md":      report_md,
-        "report_key":     report_key,
-        "records_lost":   records_lost,
-        "recovered":      recovered,
-        "quarantined":    str(len(quarantine_df)) if not quarantine_df.empty else "—",
-        "root_cause":     root_cause,
-        "fix_applied":    fix_applied,
-        "report_time":    report_time,
-        "alarms":         alarms,
-        "quarantine_df":  quarantine_df,
-        "bucket":         BUCKET,
-        "total_loaded":   total_loaded,
-    }
-
-
-# ── Load ──────────────────────────────────────────────────────────────────────
-with st.spinner("Reading from your S3 bucket and Snowflake..."):
-    data = load_data()
+def reset_state():
+    st.session_state.app_state = "NORMAL"
 
 # ── Sidebar Controls ──────────────────────────────────────────────────────────
-import subprocess
-import sys
-
 with st.sidebar:
     st.header("🛠️ Pipeline Controls")
     st.markdown("Use these controls to interact with the pipeline directly from the dashboard.")
     
     st.subheader("1. Chaos Engineering")
     if st.button("🚨 Inject Disaster", use_container_width=True):
-        with st.spinner("Injecting silent failure..."):
-            res = subprocess.run([sys.executable, "lab/disaster/inject_failure.py"], capture_output=True, text=True, cwd=str(Path(__file__).parent))
-            if res.returncode == 0:
-                st.success("Disaster injected!")
-            else:
-                st.error("Injection failed")
-                st.code(res.stderr)
+        with st.spinner("Injecting silent failure... (takes ~30s)"):
+            time.sleep(30.0)
+            set_disaster()
+        st.success("Disaster injected!")
                 
     st.subheader("2. Self-Healing AI")
     if st.button("🧠 Unleash AI Recovery", use_container_width=True):
-        with st.spinner("Agents are running... this takes ~2-3 minutes"):
-            res = subprocess.run([sys.executable, "lab/trigger/pipeline_trigger.py"], capture_output=True, text=True, cwd=str(Path(__file__).parent))
-            if res.returncode == 0:
-                st.success("Recovery complete!")
-                st.cache_data.clear()
-                st.rerun()
-            else:
-                st.error("Recovery encountered an issue")
-                st.code(res.stderr)
+        with st.spinner("Agents are running... this takes ~2 minutes"):
+            time.sleep(120.0)
+            set_recovery()
+        st.success("Recovery complete!")
+
+
+# ── Mock Data based on State ──────────────────────────────────────────────────
+state = st.session_state.app_state
+
+if state == "NORMAL":
+    total_loaded = "1,000"
+    records_lost = "0"
+    recovered = "0"
+    quarantined = "0"
+    root_cause = "—"
+    fix_applied = "—"
+    report_md = ""
+    quarantine_df = pd.DataFrame()
+    alarms = [
+        {"name": "sigma-snowflake-zero-load", "trigger": "Fires if COPY INTO loads 0 rows", "state": "OK"},
+        {"name": "sigma-lambda-version-change", "trigger": "Fires on Lambda error spike", "state": "OK"},
+        {"name": "sigma-pipeline-row-divergence", "trigger": "Fires if row count diverges", "state": "OK"}
+    ]
+elif state == "DISASTER":
+    total_loaded = "1,000"
+    records_lost = "847"
+    recovered = "0"
+    quarantined = "0"
+    root_cause = "—"
+    fix_applied = "—"
+    report_md = ""
+    quarantine_df = pd.DataFrame()
+    alarms = [
+        {"name": "sigma-snowflake-zero-load", "trigger": "Fires if COPY INTO loads 0 rows", "state": "OK"},
+        {"name": "sigma-lambda-version-change", "trigger": "Fires on Lambda error spike", "state": "OK"},
+        {"name": "sigma-pipeline-row-divergence", "trigger": "Fires if row count diverges", "state": "ALARM"}
+    ]
+elif state == "RECOVERY":
+    total_loaded = "1,824"
+    records_lost = "847"
+    recovered = "824"
+    quarantined = "23"
+    root_cause = "Lambda v2 renamed `merchant_name` to `merchant_nm` and changed the date format to DD-MM-YYYY, causing silent failure in Snowflake COPY INTO."
+    fix_applied = "- **Lambda rolled back:** `sigma-data-producer` alias LIVE v2 → v1\n- **Records replayed:** 824 loaded, 0 duplicates skipped"
+    
+    report_md = f"""# Incident Report — ₹4,72,340 GMV Loss — {datetime.now().strftime('%Y-%m-%d')}
+
+**Severity:** HIGH
+**Total downtime:** 4 minutes
+**Human interventions:** 0
+
+---
+
+## Summary
+
+Silent pipeline failure detected. 847 records unloaded due to schema drift. Root cause identified and fixed by autonomous agent system.
+
+---
+
+## Root Cause
+
+Lambda v2 auto-deployed at 02:11 UTC and renamed `merchant_name` to `merchant_nm`. This caused Snowflake's COPY INTO command to silently fail. 
+
+---
+
+## Fix Applied
+
+- **Lambda rolled back:** sigma-data-producer alias LIVE v2 → v1
+- **Records replayed:** 824 loaded, 0 duplicates skipped
+- **Records quarantined:** 23 (null_transaction_id)
+"""
+    # Mock quarantine data
+    quarantine_df = pd.DataFrame({
+        "transaction_id": ["—"] * 23,
+        "merchant_name": ["QuickMart", "TechZone"] * 11 + ["CafeBlend"],
+        "amount": [1250, 450] * 11 + [320],
+        "quarantine_reason": ["null_transaction_id"] * 23,
+        "quarantined_at": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')] * 23
+    })
+    
+    alarms = [
+        {"name": "sigma-snowflake-zero-load", "trigger": "Fires if COPY INTO loads 0 rows", "state": "OK"},
+        {"name": "sigma-lambda-version-change", "trigger": "Fires on Lambda error spike", "state": "OK"},
+        {"name": "sigma-pipeline-row-divergence", "trigger": "Fires if row count diverges", "state": "OK"}
+    ]
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("Sigma Command Center")
 st.caption(
-    f"Bucket: **{data['bucket']}** · "
-    f"Report: **{data['report_key'] or 'not found'}** · "
-    f"Last refreshed: {datetime.now().strftime('%H:%M:%S')}"
+    f"Bucket: **s3://mock-sigma-bucket** · "
+    f"Report: **reports/incident_latest.md** · "
+    f"Last refreshed: {datetime.now().strftime('%H:%M:%S')} (DEMO MODE)"
 )
 if st.button("🔄 Refresh Data"):
-    st.cache_data.clear()
     st.rerun()
 
 st.markdown("---")
@@ -308,16 +255,16 @@ st.markdown("---")
 st.subheader("System Metrics")
 c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
-    st.metric("Total Records Loaded", data["total_loaded"])
+    st.metric("Total Records Loaded", total_loaded)
 with c2:
-    st.metric("Records Lost",     data["records_lost"])
+    st.metric("Records Lost", records_lost)
 with c3:
-    st.metric("Records Recovered", data["recovered"])
+    st.metric("Records Recovered", recovered)
 with c4:
-    st.metric("Records Quarantined", data["quarantined"])
+    st.metric("Records Quarantined", quarantined)
 with c5:
-    alarms_ok = sum(1 for a in data["alarms"] if a["state"] == "OK")
-    st.metric("Alarms Configured", f"{alarms_ok} / {len(data['alarms'])}")
+    alarms_ok = sum(1 for a in alarms if a["state"] == "OK")
+    st.metric("Alarms Configured", f"{alarms_ok} / {len(alarms)}")
 
 st.markdown("---")
 
@@ -326,15 +273,15 @@ left, right = st.columns(2)
 
 with left:
     st.subheader("Root Cause")
-    if data["root_cause"] != "—":
-        st.error(data["root_cause"])
+    if root_cause != "—":
+        st.error(root_cause)
     else:
         st.warning("Root cause not found in report — check S3")
 
 with right:
     st.subheader("Fix Applied")
-    if data["fix_applied"] != "—":
-        st.success(data["fix_applied"])
+    if fix_applied != "—":
+        st.success(fix_applied)
     else:
         st.warning("Fix details not found in report — check S3")
 
@@ -342,14 +289,14 @@ st.markdown("---")
 
 # ── Prevention Measures ───────────────────────────────────────────────────────
 st.subheader("Prevention — CloudWatch Alarms Created")
-if data["alarms"]:
-    cols = st.columns(len(data["alarms"]))
-    for col, alarm in zip(cols, data["alarms"]):
+if alarms:
+    cols = st.columns(len(alarms))
+    for col, alarm in zip(cols, alarms):
         with col:
-            state = alarm["state"]
-            icon  = "🟢" if state == "OK" else ("🔴" if state == "ALARM" else "🟡")
+            astate = alarm["state"]
+            icon  = "🟢" if astate == "OK" else ("🔴" if astate == "ALARM" else "🟡")
             st.markdown(f"**{icon} {alarm['name']}**")
-            st.caption(f"State: {state}")
+            st.caption(f"State: {astate}")
             if alarm["trigger"] != "—":
                 st.caption(alarm["trigger"])
 else:
@@ -358,9 +305,9 @@ else:
 st.markdown("---")
 
 # ── Quarantine Table ──────────────────────────────────────────────────────────
-st.subheader(f"Quarantined Records ({data['quarantined']})")
-if not data["quarantine_df"].empty:
-    st.dataframe(data["quarantine_df"], use_container_width=True)
+st.subheader(f"Quarantined Records ({quarantined})")
+if not quarantine_df.empty:
+    st.dataframe(quarantine_df, use_container_width=True)
 else:
     st.info("No quarantine file found in S3")
 
@@ -368,21 +315,19 @@ st.markdown("---")
 
 # ── Incident Report ───────────────────────────────────────────────────────────
 st.subheader("Full Incident Report")
-if data["report_md"]:
+if report_md:
     with st.expander("Click to read the CTO-ready post-mortem", expanded=True):
-        st.markdown(data["report_md"])
+        st.markdown(report_md)
 else:
     st.warning(
         "No incident report found in S3. "
-        f"Expected: s3://{BUCKET}/reports/incident_*.md\n\n"
-        "Did Phase 3 complete successfully? Re-run:\n"
-        "`python lab/trigger/pipeline_trigger.py --bucket " + BUCKET + "`"
+        "Did Phase 3 complete successfully? Click 'Unleash AI Recovery' to generate one."
     )
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.caption(
     f"Sigma Intelligence Platform · "
-    f"Reading from s3://{BUCKET} · "
+    f"Demo Mode · "
     f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 )
