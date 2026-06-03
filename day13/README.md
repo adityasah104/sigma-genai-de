@@ -139,7 +139,7 @@ Teams with Mystery A learn that Mystery B teams had a completely different domai
 After Lab 1 is complete, point the same agent at YOUR dbt project from Day 6.
 
 ```bash
-python lab/lineage_agent.py --lab 2 --models ../day6/sigma_dbt/models/
+python lab/lineage_agent.py --lab 2 --models ../day6/lab/sigma_dbt/models/
 ```
 
 This produces `lab/agent_outputs/catalogue_sigma.json` — the official governance
